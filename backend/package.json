@@ -1,0 +1,49 @@
+{
+  "name": "guardianchain-backend",
+  "version": "1.0.0",
+  "description": "Backend smart contracts for GuardianChain - A decentralized reporting platform with privacy features on Oasis Sapphire",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:testnet": "hardhat run scripts/deploy.js --network sapphire-testnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.js --network sapphire-mainnet",
+    "deploy:local": "hardhat run scripts/deploy.js --network hardhat",
+    "demo": "hardhat run scripts/demo.js --network hardhat",
+    "full-demo": "hardhat run scripts/full-demo.js --network hardhat",
+    "verify": "hardhat verify",
+    "node": "hardhat node",
+    "clean": "hardhat clean"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "solidity",
+    "oasis",
+    "sapphire",
+    "privacy",
+    "encryption",
+    "reporting",
+    "verification"
+  ],
+  "author": "GuardianChain Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@oasisprotocol/sapphire-contracts": "^0.2.9",
+    "@oasisprotocol/sapphire-paratime": "^1.3.0",
+    "@oasisprotocol/sapphire-hardhat": "^2.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@typechain/ethers-v6": "^0.5.0",
+    "@typechain/hardhat": "^9.0.0",
+    "hardhat": "^2.19.0",
+    "hardhat-gas-reporter": "^1.0.9",
+    "solidity-coverage": "^0.8.5",
+    "typechain": "^8.3.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "ethers": "^6.8.0"
+  }
+}
