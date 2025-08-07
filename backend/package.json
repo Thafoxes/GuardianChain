@@ -11,6 +11,10 @@
     "deploy:local": "hardhat run scripts/deploy.js --network hardhat",
     "demo": "hardhat run scripts/demo.js --network hardhat",
     "full-demo": "hardhat run scripts/full-demo.js --network hardhat",
+    "content-demo": "hardhat run scripts/content-access-demo.js --network hardhat",
+    "testnet-deploy": "hardhat run testnet-scripts/deploy-testnet.js --network sapphire-testnet",
+    "testnet-demo": "hardhat run testnet-scripts/sapphire-testnet-demo.js --network sapphire-testnet",
+    "testnet-interact": "hardhat run testnet-scripts/interact-testnet.js --network sapphire-testnet",
     "verify": "hardhat verify",
     "node": "hardhat node",
     "clean": "hardhat clean"
@@ -29,21 +33,22 @@
   "author": "GuardianChain Team",
   "license": "MIT",
   "devDependencies": {
-    "@oasisprotocol/sapphire-contracts": "^0.2.9",
-    "@oasisprotocol/sapphire-paratime": "^1.3.0",
-    "@oasisprotocol/sapphire-hardhat": "^2.0.0",
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "@nomicfoundation/hardhat-verify": "^2.0.0",
+    "@oasisprotocol/sapphire-contracts": "^0.2.9",
+    "@oasisprotocol/sapphire-hardhat": "^2.0.0",
+    "@oasisprotocol/sapphire-paratime": "^1.3.0",
     "@typechain/ethers-v6": "^0.5.0",
     "@typechain/hardhat": "^9.0.0",
+    "@types/node": "^20.0.0",
     "hardhat": "^2.19.0",
     "hardhat-gas-reporter": "^1.0.9",
     "solidity-coverage": "^0.8.5",
     "typechain": "^8.3.0",
-    "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "dotenv": "^17.2.1",
     "ethers": "^6.8.0"
   }
 }
