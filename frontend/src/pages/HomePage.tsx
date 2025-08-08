@@ -1,8 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Users, FileText, Award } from 'lucide-react';
+import { Shield, Users, FileText, Award, Coins } from 'lucide-react';
+import { useWallet } from '../contexts/WalletContext';
+import StakingModal from '../components/StakingModal';
 
 const HomePage: React.FC = () => {
+  const { wallet } = useWallet();
+  const [showStakingModal, setShowStakingModal] = useState(false);
+
+  const handleStakingSuccess = () => {
+    setShowStakingModal(false);
+    // Could redirect to dashboard or show success message
+  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-100">
       {/* Hero Section */}
@@ -17,17 +26,27 @@ const HomePage: React.FC = () => {
               Empower truth-telling with privacy-first technology.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link
-                to="/register"
-                className="btn-primary text-lg px-8 py-3 inline-flex items-center justify-center"
-              >
-                Get Started
-              </Link>
+              {wallet.isConnected ? (
+                <button
+                  onClick={() => setShowStakingModal(true)}
+                  className="btn-primary text-lg px-8 py-3 inline-flex items-center justify-center"
+                >
+                  <Coins className="mr-2" size={20} />
+                  Stake & Get Verified
+                </button>
+              ) : (
+                <Link
+                  to="/register"
+                  className="btn-primary text-lg px-8 py-3 inline-flex items-center justify-center"
+                >
+                  Get Started
+                </Link>
+              )}
               <Link
                 to="/login"
                 className="btn-secondary text-lg px-8 py-3 inline-flex items-center justify-center"
               >
-                Sign In
+                {wallet.isConnected ? 'Dashboard' : 'Sign In'}
               </Link>
             </div>
           </div>
@@ -160,14 +179,31 @@ const HomePage: React.FC = () => {
           <p className="text-xl text-primary-100 mb-8">
             Join the GuardianChain community and help build a more transparent world.
           </p>
-          <Link
-            to="/register"
-            className="bg-white text-primary-600 hover:bg-primary-50 font-medium py-3 px-8 rounded-lg transition-colors duration-200 inline-flex items-center justify-center text-lg"
-          >
-            Start Reporting Today
-          </Link>
+          {wallet.isConnected ? (
+            <button
+              onClick={() => setShowStakingModal(true)}
+              className="bg-white text-primary-600 hover:bg-primary-50 font-medium py-3 px-8 rounded-lg transition-colors duration-200 inline-flex items-center justify-center text-lg"
+            >
+              <Coins className="mr-2" size={20} />
+              Stake & Get Verified
+            </button>
+          ) : (
+            <Link
+              to="/register"
+              className="bg-white text-primary-600 hover:bg-primary-50 font-medium py-3 px-8 rounded-lg transition-colors duration-200 inline-flex items-center justify-center text-lg"
+            >
+              Start Reporting Today
+            </Link>
+          )}
         </div>
       </div>
+
+      {/* Staking Modal */}
+      <StakingModal
+        isOpen={showStakingModal}
+        onClose={() => setShowStakingModal(false)}
+        onSuccess={handleStakingSuccess}
+      />
     </div>
   );
 };

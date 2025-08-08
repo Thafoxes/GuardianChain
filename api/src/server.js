@@ -34,6 +34,7 @@ import userRoutes from './routes/user.js';
 import reportRoutes from './routes/report.js';
 import adminRoutes from './routes/admin.js';
 import healthRoutes from './routes/health.js';
+import stakeRoutes from './routes/stake.js';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
@@ -42,6 +43,7 @@ import { logger } from './utils/logger.js';
 
 // Import blockchain service
 import blockchainService from './services/blockchain.js';
+import eventMonitorService from './services/eventMonitor.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -85,6 +87,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/stake', stakeRoutes);
 
 // Welcome route
 app.get('/', (req, res) => {
@@ -98,7 +101,8 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       users: '/api/users',
       reports: '/api/reports',
-      admin: '/api/admin'
+      admin: '/api/admin',
+      stake: '/api/stake'
     }
   });
 });
@@ -117,8 +121,12 @@ app.listen(PORT, async () => {
   try {
     await blockchainService.init();
     logger.info('✅ Blockchain service initialized successfully');
+    
+    // Initialize event monitoring for automated reward distribution
+    await eventMonitorService.init();
+    logger.info('✅ Event monitoring service initialized successfully');
   } catch (error) {
-    logger.error('❌ Failed to initialize blockchain service:', error);
+    logger.error('❌ Failed to initialize services:', error);
   }
 });
 
