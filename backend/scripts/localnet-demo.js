@@ -69,7 +69,25 @@ async function main() {
 
     console.log("\n🔧 Setting up permissions...");
     await rewardToken.addMinter(reportContractAddress);
-    await reportContract.addVerifier(await verifier.getAddress());
+
+    console.log("Adding verifier permissions");
+    const addVerifierTx = await reportContract.addVerifier(await verifier.getAddress());
+    await addVerifierTx.wait();
+    console.log("   ✅ Verifier added:", await verifier.getAddress());
+
+    console.log("   👤 Adding admin as authorized verifier...");
+    const addAdminTx = await reportContract.addVerifier(await deployer.getAddress());
+    await addAdminTx.wait();
+    console.log("   ✅ Admin added as verifier:", await deployer.getAddress());
+
+
+    console.log("Checking is verifier ....");
+    // Verify both were added
+    const isVerifierAdded = await reportContract.authorizedVerifiers(await verifier.getAddress());
+    const isAdminAdded = await reportContract.authorizedVerifiers(await deployer.getAddress());
+    console.log("   ✅ Verifier authorization confirmed:", isVerifierAdded);
+    console.log("   ✅ Admin authorization confirmed:", isAdminAdded);
+
     console.log("   ✅ Permissions configured");
 
     console.log("\n📋 Contract Addresses (save these for frontend integration):");
@@ -80,6 +98,7 @@ async function main() {
     console.log("\n=== Step 2: User Registration ===");
     
     console.log("📝 Reporter registering with encrypted identifier...");
+    // required something like email, and api will put default 100 
     const registerTx = await userVerification.connect(reporter).registerUser("reporter@guardianchain.dev", 100);
     await registerTx.wait();
     console.log("   ✅ Reporter registered with encrypted identifier");
@@ -142,14 +161,80 @@ Encryption: Sapphire Network Native`;
     console.log("   📋 Total reports:", reportCount.toString());
 
     console.log("\n=== Step 4: Testing Encrypted Content Access ===");
+
+
+    // Add debugging before testing access
+    console.log("🔍 Debugging authorization status: \n");
+    const reportInfo = await reportContract.getReportInfo(1);
+    console.log("   Report reporter address:", reportInfo.reporter);
+    console.log("   Current reporter address:", await reporter.getAddress());
+    console.log("   Reporter addresses match:", reportInfo.reporter === await reporter.getAddress());
+    console.log("   Reporter addresses match:", reportInfo.reporter === await reporter.getAddress());
+    console.log("   Reporter addresses (lowercase):", reportInfo.reporter.toLowerCase() === (await reporter.getAddress()).toLowerCase());
+
+
+    const isVerifierAuthorized = await reportContract.authorizedVerifiers(await verifier.getAddress());
+    console.log("   Is verifier authorized:", isVerifierAuthorized);
+    console.log("   Verifier address:", await verifier.getAddress());
+
+    // Check admin permissions
+    console.log("🔍 Check admin permissions:");
+    const adminAddress = await reportContract.admin();
+    console.log("   Contract admin:", adminAddress);
+    console.log("   Deployer address:", await deployer.getAddress());
+
+
+    // Check if admin can access (they should be able to)
+    console.log("\n🔍 Testing admin access first:");
+    try {
+      const adminContent = await reportContract.connect(deployer).getReportContent(1);
+      const receipt = await adminContent.wait();
+
+      const events = receipt.logs.map(log => {
+        try{
+          return reportContract.interface.parseLog(log);
+        }catch (e){
+          return e.message;
+        }
+      }).filter(event => event != null);
+
+      console.log("   📋 Events captured:");
+      events.forEach(event => {
+        if (event.name === 'ContentRetrieved') {
+          console.log("   🔍 ContentRetrieved Event:");
+          console.log("     - Report ID:", event.args.reportId.toString());
+          console.log("     - Accessor:", event.args.accessor);
+          console.log("     - Content:", event.args.content);
+        }
+      });
+
+    } catch (error) {
+      console.log("   ❌ ADMIN CANNOT ACCESS - Contract issue!");
+      console.log("   Error:", error.message);
+    }
     
     console.log("1️⃣ REPORTER accessing their own encrypted report:");
     try {
       const reportContent1 = await reportContract.connect(reporter).getReportContent(1);
-      console.log("   Status: ✅ ACCESS GRANTED");
-      console.log("   Content preview:", reportContent1.substring(0, 50) + "...");
-      console.log("   Full content retrieved:", reportContent1.length > 100 ? "YES" : "NO");
-      console.log("   ✅ Content integrity verified - matches original");
+      const receipt = await reportContent1.wait();
+
+      const events = receipt.logs.map(log => {
+        try{
+          return reportContract.interface.parseLog(log);
+        }catch (e){
+          return e.message;
+        }
+      }).filter(event => event != null);
+
+      console.log("   📋 Events captured:");
+      events.forEach(event => {
+        if (event.name === 'ContentRetrieved') {
+          console.log("   🔍 ContentRetrieved Event:");
+          console.log("     - Report ID:", event.args.reportId.toString());
+          console.log("     - Accessor:", event.args.accessor);
+          console.log("     - Content:", event.args.content);
+        }
+      });
     } catch (error) {
       console.log("   Status: ❌ ACCESS DENIED");
       console.log("   Error:", error.message);
@@ -157,10 +242,22 @@ Encryption: Sapphire Network Native`;
 
     console.log("\n2️⃣ AUTHORIZED VERIFIER accessing encrypted report:");
     try {
-      const reportContent2 = await reportContract.connect(verifier).getReportContent(1);
-      console.log("   Status: ✅ ACCESS GRANTED");
-      console.log("   Content preview:", reportContent2.substring(0, 50) + "...");
-      console.log("   Verifier can read content:", reportContent2.length > 100 ? "YES" : "NO");
+      const reportContent2 = await reportContract.connect(verifier).getReportContent.staticCall(1);
+      const receipt = await reportContent2.wait();
+
+      const events = receipt.logs.map(log => {
+        try{
+          return reportContract.interface.parseLog(log);
+        }catch (e){
+          return e.message;
+        }
+      }).filter(event => event != null);
+      const contentEvent = events.find(event => event.name === 'ContentRetrieved');
+      if (contentEvent) {
+        console.log("   ✅ REPORTER CAN ACCESS");
+        console.log("   Content preview:", contentEvent.args.content.substring(0, 50) + "...");
+      }
+      
     } catch (error) {
       console.log("   Status: ❌ ACCESS DENIED");
       console.log("   Error:", error.message);
@@ -168,9 +265,12 @@ Encryption: Sapphire Network Native`;
 
     console.log("\n3️⃣ UNAUTHORIZED USER attempting access:");
     try {
-      const reportContent3 = await reportContract.connect(unauthorized).getReportContent(1);
-      console.log("   Status: ❌ SECURITY BREACH - This should not happen!");
-      console.log("   Content:", reportContent3);
+      const reportContent3 = await reportContract.connect(unauthorized).getReportContent.staticCall(1);
+      if (typeof reportContent3 === "string"){
+        console.log("   Status: ❌ SECURITY BREACH - This should not happen!");
+        console.log("   Content:", reportContent3);
+      }
+      
     } catch (error) {
       console.log("   Status: ✅ ACCESS PROPERLY DENIED");
       console.log("   Security message:", error.message.includes("revert") ? "Access control working" : error.message);

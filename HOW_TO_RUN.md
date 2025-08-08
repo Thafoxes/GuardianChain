@@ -36,7 +36,7 @@ cd GuardianChain
 ### **1.2 Start Oasis Sapphire Localnet**
 ```bash
 # Start Docker container with blockchain
-docker run -it -p 8545:8545 -p 8546:8546 ghcr.io/oasisprotocol/sapphire-localnet -test-mnemonic
+docker run -it -p8544-8548:8544-8548 ghcr.io/oasisprotocol/sapphire-localnet:latest-2025-08-05-gita4d5d8b 
 ```
 
 **✅ What this does:**

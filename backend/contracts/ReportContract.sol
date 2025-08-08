@@ -193,18 +193,19 @@ contract ReportContract {
     {
         Report memory report = reports[reportId];
         require(
-            msg.sender == report.reporter || authorizedVerifiers[msg.sender],
+            authorizedVerifiers[msg.sender] || report.reporter == msg.sender,
             "Not authorized to view report content"
         );
         
         // Extract nonce and encrypted data
-        bytes12 nonce;
+        bytes memory nonceBytes = new bytes(12);
         bytes memory encryptedData = new bytes(report.encryptedContent.length - 12);
         
         // Extract the 12-byte nonce
         for (uint i = 0; i < 12; i++) {
-            nonce |= bytes12(report.encryptedContent[i]) >> (i * 8);
+            nonceBytes[i] = report.encryptedContent[i];
         }
+        bytes12 nonce = bytes12(nonceBytes);
         // Extract the encrypted data
         for (uint i = 12; i < report.encryptedContent.length; i++) {
             encryptedData[i - 12] = report.encryptedContent[i];
