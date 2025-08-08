@@ -18,6 +18,7 @@
     "localnet-deploy": "hardhat run scripts/deploy-localnet.js --network sapphire-localnet",
     "localnet-demo": "hardhat run scripts/localnet-demo.js --network sapphire-localnet",
     "report-demo": "hardhat run scripts/report-retrieval-demo.js --network sapphire-localnet",
+    "content-test": "hardhat run scripts/test-content-retrieval.js --network sapphire-localnet",
     "verify": "hardhat verify",
     "node": "hardhat node",
     "clean": "hardhat clean"

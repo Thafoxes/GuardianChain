@@ -55,6 +55,7 @@ contract ReportContract {
     event RewardClaimed(uint256 indexed reportId, address indexed reporter, uint256 amount);
     event VerifierAdded(address indexed verifier);
     event VerifierRemoved(address indexed verifier);
+    event ContentRetrieved(uint256 indexed reportId, address indexed accessor, string content);
     
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only admin can perform this action");
@@ -220,7 +221,12 @@ contract ReportContract {
             abi.encodePacked(report.reporter, reportId)
         );
         
-        return string(decryptedBytes);
+        string memory decryptedContent = string(decryptedBytes);
+        
+        // Emit event with the decrypted content for easy retrieval
+        emit ContentRetrieved(reportId, msg.sender, decryptedContent);
+        
+        return decryptedContent;
     }
     
     /**
