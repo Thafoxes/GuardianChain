@@ -2,33 +2,72 @@
 
 REST API server for GuardianChain that connects React frontend to Oasis Sapphire smart contracts.
 
-## 🚀 Quick Start
+## � System Requirements
 
 ### Prerequisites
-- Node.js 18+ 
-- NPM or Yarn
-- Deployed GuardianChain contracts (from `/backend`)
+- **Node.js 18+** (LTS recommended)
+- **NPM 8+** or **Yarn 1.22+**
+- **Git** for version control
+- **Docker Desktop** (for running Oasis Sapphire localnet)
+- **MetaMask** browser extension
+- **Windows/macOS/Linux** operating system
 
-### Installation
+### Required Software Installation
 
-1. **Install dependencies**
+1. **Install Node.js**
+   - Download from [nodejs.org](https://nodejs.org/)
+   - Verify installation: `node --version` (should be 18+)
+   - Verify npm: `npm --version`
+
+2. **Install Docker Desktop**
+   - Download from [docker.com](https://www.docker.com/products/docker-desktop/)
+   - Required for running Oasis Sapphire localnet blockchain
+
+3. **Install MetaMask**
+   - Browser extension from [metamask.io](https://metamask.io/)
+   - Required for wallet connections and transactions
+
+## 🚀 Quick Start
+
+### Installation Steps
+
+1. **Clone the repository**
 ```bash
-cd api
+git clone https://github.com/Thafoxes/GuardianChain.git
+cd GuardianChain/api
+```
+
+2. **Install dependencies**
+```bash
 npm install
 ```
 
-2. **Configure environment**
+3. **Setup environment**
 ```bash
 cp .env.example .env
-# Edit .env with your contract addresses
 ```
 
-3. **Start development server**
+4. **Configure contract addresses**
+   - Update `.env` with deployed contract addresses from `/backend/deployments/`
+   - Default localnet addresses are pre-configured
+
+5. **Start development server**
 ```bash
 npm run dev
 ```
 
 The API will be available at `http://localhost:3001`
+
+### Dependencies Installed
+- **express**: Web framework for Node.js
+- **ethers**: Ethereum library for blockchain interactions
+- **@oasisprotocol/sapphire-paratime**: Oasis Sapphire runtime wrapper
+- **express-validator**: Input validation middleware
+- **winston**: Logging library
+- **cors**: Cross-origin resource sharing
+- **express-rate-limit**: Rate limiting middleware
+- **express-async-errors**: Async error handling
+- **dotenv**: Environment variable management
 
 ## 📡 API Endpoints
 
@@ -86,6 +125,67 @@ REPORT_CONTRACT_ADDRESS=0x...
 - `localnet` - Docker Sapphire localnet
 - `testnet` - Sapphire testnet
 - `mainnet` - Sapphire mainnet
+
+## ⚙️ Setup Requirements Checklist
+
+Before running the API server, ensure you have:
+
+- [ ] **Node.js 18+** installed and verified
+- [ ] **Dependencies** installed via `npm install`
+- [ ] **Environment file** configured (`.env`)
+- [ ] **Contract addresses** updated in `.env`
+- [ ] **Blockchain localnet** running (Docker)
+- [ ] **Contracts deployed** from `/backend` directory
+- [ ] **Port 3001** available (not in use by other services)
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+1. **"Contract ReportContract not found"**
+   - Deploy contracts first using `/backend`
+   - Update contract addresses in `.env`
+   - Restart API server after env changes
+
+2. **"EADDRINUSE: address already in use"**
+   - Change PORT in `.env` to different value
+   - Kill existing process on port 3001
+   - Use `npx kill-port 3001` to free the port
+
+3. **"Failed to connect to blockchain"**
+   - Ensure Docker is running
+   - Start Sapphire localnet from `/backend`
+   - Check network URL in blockchain service
+
+4. **"CORS policy" errors**
+   - Update `FRONTEND_URL` in `.env`
+   - Ensure frontend URL matches exactly
+   - Restart API server after env changes
+
+5. **"Environment variables not loaded"**
+   - Ensure `.env` file exists in `/api` directory
+   - Check `.env` file format (no spaces around =)
+   - Restart server after env changes
+
+### Development Commands
+
+```bash
+npm start          # Start production server
+npm run dev        # Start development server with nodemon
+npm test          # Run tests (if available)
+npm run lint      # Lint code (if configured)
+```
+
+### Health Check Endpoints
+
+Test if API is working:
+```bash
+# Basic health check
+curl http://localhost:3001/api/health
+
+# Contract connectivity check
+curl http://localhost:3001/api/reports/debug
+```
 
 ## 📋 Usage Examples
 
