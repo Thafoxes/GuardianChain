@@ -197,9 +197,6 @@ router.post('/submit', [
  */
 router.get('/', async (req, res) => {
   try {
-    // Ensure blockchain service is initialized
-    await blockchainService.ensureInitialized();
-
     const { 
       status = 'all', 
       category = 'all', 
@@ -207,31 +204,50 @@ router.get('/', async (req, res) => {
       offset = 0 
     } = req.query;
 
+    // Always require blockchain connection for real data
+    await blockchainService.ensureInitialized();
     const reportContract = blockchainService.getContract('ReportContract');
     
     // Get total number of reports from blockchain
     const totalReports = await reportContract.getTotalReports();
     const totalReportsNum = Number(totalReports);
     
-    logger.info(`Fetching all reports, total on blockchain: ${totalReportsNum}`);
+    logger.info(`Fetching reports from blockchain, total: ${totalReportsNum}`);
     
+    if (totalReportsNum === 0) {
+      return res.json({
+        success: true,
+        data: {
+          reports: [],
+          total: 0,
+          offset: parseInt(offset),
+          limit: parseInt(limit),
+          hasMore: false
+        }
+      });
+    }
+
     const allReports = [];
-    
-    // Fetch all reports from blockchain
+
+    // Fetch all reports from blockchain with public info only
     for (let i = 1; i <= totalReportsNum; i++) {
       try {
         const reportInfo = await reportContract.getReportInfo(i);
         
         const report = {
           id: i,
-          title: `Report #${i}`, // We'll need to decrypt content to get real title
-          category: "security", // We'll need metadata for this
-          severity: "medium", // We'll need metadata for this
-          status: getStatusName(reportInfo.status).toLowerCase(),
+          title: `Report #${i}`, // Public title placeholder - real title requires decryption
+          category: "security", // Default - metadata can be enhanced later
+          severity: "medium", // Default - metadata can be enhanced later
+          status: getStatusName(reportInfo.status),
           timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(),
           reporter: reportInfo.reporter,
-          anonymous: false, // We'll need metadata for this
-          rewardClaimed: reportInfo.rewardClaimed
+          anonymous: false, // Default - metadata can be enhanced later
+          rewardClaimed: reportInfo.rewardClaimed,
+          verifiedBy: reportInfo.verifiedBy === '0x0000000000000000000000000000000000000000' ? null : reportInfo.verifiedBy,
+          verificationTimestamp: reportInfo.verificationTimestamp > 0 ? 
+            new Date(Number(reportInfo.verificationTimestamp) * 1000).toISOString() : null,
+          contentHash: reportInfo.contentHash
         };
         
         allReports.push(report);
@@ -241,13 +257,11 @@ router.get('/', async (req, res) => {
       }
     }
 
-    const combinedReports = allReports;
-
     // Filter reports based on query parameters
-    let filteredReports = combinedReports;
+    let filteredReports = allReports;
     
     if (status !== 'all') {
-      filteredReports = filteredReports.filter(report => report.status === status);
+      filteredReports = filteredReports.filter(report => report.status.toLowerCase() === status.toLowerCase());
     }
     
     if (category !== 'all') {
@@ -259,14 +273,13 @@ router.get('/', async (req, res) => {
     const endIndex = startIndex + parseInt(limit);
     const paginatedReports = filteredReports.slice(startIndex, endIndex);
 
-    logger.info(`Returning ${paginatedReports.length} reports (${allReports.length} from blockchain)`);
+    logger.info(`Returning ${paginatedReports.length} reports (total available: ${allReports.length})`);
 
     res.json({
       success: true,
       data: {
         reports: paginatedReports,
         total: filteredReports.length,
-        blockchainReports: allReports.length,
         offset: parseInt(offset),
         limit: parseInt(limit),
         hasMore: endIndex < filteredReports.length
@@ -274,10 +287,10 @@ router.get('/', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Error fetching reports:', error);
+    logger.error('Error fetching reports from blockchain:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch reports',
+      message: 'Failed to fetch reports from blockchain',
       error: error.message
     });
   }
@@ -285,7 +298,7 @@ router.get('/', async (req, res) => {
 
 /**
  * @route GET /api/reports/:id
- * @desc Get specific report details
+ * @desc Get specific report details from blockchain (public info only)
  * @access Public
  */
 router.get('/:id', async (req, res) => {
@@ -293,40 +306,58 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     const reportId = parseInt(id);
 
-    if (isNaN(reportId)) {
+    if (isNaN(reportId) || reportId <= 0) {
       return res.status(400).json({
         success: false,
         message: 'Invalid report ID'
       });
     }
 
-    // Mock report detail (in production, this would query the blockchain)
-    const mockReport = {
-      id: reportId,
-      title: "Critical Smart Contract Vulnerability in DeFi Protocol",
-      content: "Discovered a reentrancy vulnerability in the withdraw function that could allow attackers to drain the entire contract balance. The vulnerability exists in the withdraw() function where external calls are made before state changes.",
-      evidence: "Transaction hash: 0x123..., Affected function: withdraw(), Estimated impact: $2.5M at risk",
-      category: "security",
-      severity: "critical",
-      status: "investigating",
-      timestamp: new Date(Date.now() - 86400000).toISOString(),
-      reporter: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
-      anonymous: false,
-      rewardClaimed: false,
-      investigator: "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
-      verificationTimestamp: null
-    };
+    // Always require blockchain connection for real data
+    await blockchainService.ensureInitialized();
+    const reportContract = blockchainService.getContract('ReportContract');
+    
+    try {
+      const reportInfo = await reportContract.getReportInfo(reportId);
+      
+      const report = {
+        id: reportId,
+        title: `Report #${reportId}`, // Public title placeholder - real title requires decryption
+        content: "Content is encrypted and requires authorization to view", // Placeholder
+        evidence: "Evidence is encrypted and requires authorization to view", // Placeholder
+        category: "security", // Default - can be enhanced with metadata
+        severity: "medium", // Default - can be enhanced with metadata
+        status: getStatusName(reportInfo.status),
+        timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(),
+        reporter: reportInfo.reporter,
+        anonymous: false, // Default - can be enhanced with metadata
+        rewardClaimed: reportInfo.rewardClaimed,
+        verifiedBy: reportInfo.verifiedBy === '0x0000000000000000000000000000000000000000' ? null : reportInfo.verifiedBy,
+        verificationTimestamp: reportInfo.verificationTimestamp > 0 ? 
+          new Date(Number(reportInfo.verificationTimestamp) * 1000).toISOString() : null,
+        contentHash: reportInfo.contentHash,
+        investigator: reportInfo.verifiedBy === '0x0000000000000000000000000000000000000000' ? null : reportInfo.verifiedBy
+      };
 
-    res.json({
-      success: true,
-      data: mockReport
-    });
+      res.json({
+        success: true,
+        data: report
+      });
+    } catch (blockchainError) {
+      if (blockchainError.message.includes('Report does not exist')) {
+        return res.status(404).json({
+          success: false,
+          message: 'Report not found'
+        });
+      }
+      throw blockchainError;
+    }
 
   } catch (error) {
-    logger.error('Error fetching report details:', error);
+    logger.error('Error fetching report details from blockchain:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch report details',
+      message: 'Failed to fetch report details from blockchain',
       error: error.message
     });
   }
@@ -493,7 +524,10 @@ router.post('/:id/content', [
       });
     }
 
-    // Create signer
+    // Ensure blockchain is initialized
+    await blockchainService.ensureInitialized();
+
+    // Create signer from private key
     const signer = blockchainService.createSigner(privateKey);
     
     // Verify signer address matches provided address
@@ -504,42 +538,82 @@ router.post('/:id/content', [
       });
     }
 
-    // Get contract with signer
+    // Get contract with signer for authorization
     const reportContract = blockchainService.getContractWithSigner('ReportContract', signer);
 
-    // Get decrypted content
-    const tx = await reportContract.getReportContent(reportId);
-    const receipt = await tx.wait();
+    // First check if report exists
+    try {
+      await reportContract.getReportInfo(reportId);
+    } catch (error) {
+      if (error.message.includes('Report does not exist')) {
+        return res.status(404).json({
+          success: false,
+          message: 'Report not found'
+        });
+      }
+      throw error;
+    }
 
-    // Extract content from ContentRetrieved event
-    let decryptedContent = null;
-    for (const log of receipt.logs) {
-      try {
-        const parsedLog = reportContract.interface.parseLog(log);
-        if (parsedLog.name === 'ContentRetrieved') {
-          decryptedContent = parsedLog.args.content;
-          break;
+    // Get decrypted content - this will only work if user is authorized (reporter or verifier)
+    try {
+      const tx = await reportContract.getReportContent(reportId);
+      const receipt = await tx.wait();
+
+      // Extract content from ContentRetrieved event
+      let decryptedContent = null;
+      for (const log of receipt.logs) {
+        try {
+          const parsedLog = reportContract.interface.parseLog(log);
+          if (parsedLog.name === 'ContentRetrieved') {
+            decryptedContent = parsedLog.args.content;
+            break;
+          }
+        } catch {
+          continue;
         }
-      } catch {
-        continue;
       }
-    }
 
-    if (!decryptedContent) {
-      throw new Error('Failed to retrieve decrypted content from transaction');
-    }
-
-    res.json({
-      success: true,
-      data: {
-        reportId,
-        content: decryptedContent,
-        accessedBy: walletAddress,
-        transactionHash: tx.hash
+      if (!decryptedContent) {
+        throw new Error('Failed to retrieve decrypted content from transaction');
       }
-    });
 
-    logger.info(`Report ${reportId} content accessed by ${walletAddress}`);
+      // Parse the decrypted JSON content
+      let parsedContent;
+      try {
+        parsedContent = JSON.parse(decryptedContent);
+      } catch (parseError) {
+        // If content is not JSON, return as plain text
+        parsedContent = {
+          title: `Report #${reportId}`,
+          content: decryptedContent,
+          evidence: "",
+          category: "other",
+          severity: "medium",
+          anonymous: false
+        };
+      }
+
+      res.json({
+        success: true,
+        data: {
+          reportId,
+          ...parsedContent,
+          accessedBy: walletAddress,
+          transactionHash: tx.hash
+        }
+      });
+
+      logger.info(`Report ${reportId} content accessed by ${walletAddress}`);
+
+    } catch (authError) {
+      if (authError.message.includes('Not authorized')) {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized to view this report content. Only the reporter or authorized verifiers can access encrypted content.'
+        });
+      }
+      throw authError;
+    }
 
   } catch (error) {
     logger.error('Error retrieving report content:', error);
@@ -547,14 +621,11 @@ router.post('/:id/content', [
     let message = 'Failed to retrieve report content';
     let statusCode = 500;
 
-    if (error.message.includes('Not authorized')) {
-      message = 'Not authorized to view this report content';
-      statusCode = 403;
-    } else if (error.message.includes('Report does not exist')) {
-      message = 'Report not found';
-      statusCode = 404;
-    } else if (error.message.includes('insufficient funds')) {
+    if (error.message.includes('insufficient funds')) {
       message = 'Insufficient funds for transaction';
+      statusCode = 400;
+    } else if (error.message.includes('execution reverted')) {
+      message = 'Transaction failed: ' + error.message;
       statusCode = 400;
     }
 

@@ -106,7 +106,7 @@ export const userApi = {
     identifier: string;
     longevity: number;
     walletAddress: string;
-    privateKey: string;
+    privateKey?: string;
   }): Promise<ApiResponse<{ txHash: string }>> =>
     api.post('/users/register', data),
 };
@@ -135,8 +135,8 @@ export const reportApi = {
   getReport: (id: string): Promise<ApiResponse<Report>> =>
     api.get(`/reports/${id}`),
 
-  getReportContent: (id: string): Promise<ApiResponse<{ content: string }>> =>
-    api.get(`/reports/${id}/content`),
+  getReportContent: (id: string, walletAddress: string, privateKey: string): Promise<ApiResponse<any>> =>
+    api.post(`/reports/${id}/content`, { walletAddress, privateKey }),
 
   verifyReport: (id: string, status: number): Promise<ApiResponse<{ txHash: string }>> =>
     api.post(`/reports/${id}/verify`, { status }),

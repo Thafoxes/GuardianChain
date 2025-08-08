@@ -8,7 +8,7 @@ interface AuthContextType {
   auth: AuthState;
   login: () => Promise<void>;
   logout: () => void;
-  register: (metadata?: any) => Promise<void>;
+  register: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -81,7 +81,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Register new user
-  const register = async (metadata?: any): Promise<void> => {
+  const register = async (): Promise<void> => {
     if (!wallet.isConnected || !wallet.address) {
       throw new Error('Wallet not connected');
     }
@@ -89,23 +89,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setAuth(prev => ({ ...prev, loading: true }));
 
-      // Get nonce from server
-      const nonceResponse = await authApi.getNonce(wallet.address);
-      const nonce = nonceResponse.data.nonce;
-
-      // Create message to sign
-      const message = `Register with GuardianChain.\n\nNonce: ${nonce}\nAddress: ${wallet.address}`;
-
-      // Sign message
-      const signature = await signMessage(message);
-
-      // Send registration request
       const registerResponse = await authApi.register({
         address: wallet.address,
-        signature,
-        message,
-        nonce,
-        metadata,
+        metadata: {
+          identifier: 'auto_user',
+          longevity: 1,
+        },
       });
 
       if (registerResponse.success && registerResponse.data.user) {
@@ -115,16 +104,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           loading: false,
         });
 
-        // Store token if provided
-        if (registerResponse.data.token) {
-          localStorage.setItem('auth_token', registerResponse.data.token);
-        }
-
         toast.success('Registration successful!');
       } else {
         throw new Error(registerResponse.message || 'Registration failed');
       }
-
     } catch (error: any) {
       console.error('Registration failed:', error);
       setAuth(prev => ({ ...prev, loading: false }));

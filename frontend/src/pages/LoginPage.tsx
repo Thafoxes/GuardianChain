@@ -151,17 +151,6 @@ const LoginPage: React.FC = () => {
             </div>
           )}
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-secondary-600">
-              Don't have an account?{' '}
-              <Link
-                to="/register"
-                className="text-primary-600 hover:text-primary-700 font-medium"
-              >
-                Register here
-              </Link>
-            </p>
-          </div>
         </div>
 
         <div className="text-center text-xs text-secondary-500">

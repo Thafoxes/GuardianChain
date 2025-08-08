@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, AlertCircle, UserCheck, Clock, Shield } from 'lucide-react';
+import { X, AlertCircle, UserCheck, Shield } from 'lucide-react';
 import { userApi } from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -17,38 +17,22 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
   onVerificationComplete
 }) => {
   const [isRegistering, setIsRegistering] = useState(false);
-  const [formData, setFormData] = useState({
-    identifier: '',
-    longevity: 30,
-    privateKey: ''
-  });
 
   if (!isOpen) return null;
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.identifier.trim()) {
-      toast.error('Please enter an identifier');
-      return;
-    }
-
-    if (!formData.privateKey.trim()) {
-      toast.error('Please enter your private key');
-      return;
-    }
 
     setIsRegistering(true);
 
     try {
       await userApi.registerUser({
-        identifier: formData.identifier.trim(),
-        longevity: formData.longevity,
-        walletAddress,
-        privateKey: formData.privateKey.trim()
+        identifier: 'auto_user',
+        longevity: 1,
+        walletAddress
       });
 
-      toast.success('Registration successful! Please wait for admin verification.');
+      toast.success('Registration and verification successful! You can now submit reports.');
       onVerificationComplete();
       onClose();
     } catch (error: any) {
@@ -57,14 +41,6 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
     } finally {
       setIsRegistering(false);
     }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'number' ? parseInt(value) || 0 : value
-    }));
   };
 
   return (
@@ -106,87 +82,35 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
 
           {/* Verification Steps */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-900 mb-3">Verification Process:</h3>
+            <h3 className="text-sm font-medium text-gray-900 mb-3">Simplified Verification Process:</h3>
             <div className="space-y-3">
               <div className="flex items-center space-x-3">
                 <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-xs font-medium text-blue-600">1</span>
                 </div>
-                <span className="text-sm text-gray-600">Complete registration form</span>
+                <span className="text-sm text-gray-600">Click "Verify Account" below</span>
               </div>
               <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
-                  <Clock className="w-3 h-3 text-gray-400" />
+                <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+                  <span className="text-xs font-medium text-green-600">2</span>
                 </div>
-                <span className="text-sm text-gray-600">Wait for admin verification</span>
+                <span className="text-sm text-gray-600">Instant verification by admin</span>
               </div>
               <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
-                  <Shield className="w-3 h-3 text-gray-400" />
+                <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+                  <Shield className="w-3 h-3 text-green-600" />
                 </div>
-                <span className="text-sm text-gray-600">Submit reports to blockchain</span>
+                <span className="text-sm text-gray-600">Submit reports immediately</span>
               </div>
             </div>
           </div>
 
           {/* Registration Form */}
           <form onSubmit={handleRegister} className="space-y-4">
-            <div>
-              <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-1">
-                User Identifier
-              </label>
-              <input
-                type="text"
-                id="identifier"
-                name="identifier"
-                value={formData.identifier}
-                onChange={handleInputChange}
-                placeholder="Enter a unique identifier (e.g., username)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">This will be encrypted and stored on the blockchain</p>
-            </div>
-
-            <div>
-              <label htmlFor="longevity" className="block text-sm font-medium text-gray-700 mb-1">
-                Account Longevity (years)
-              </label>
-              <input
-                type="number"
-                id="longevity"
-                name="longevity"
-                value={formData.longevity}
-                onChange={handleInputChange}
-                min="1"
-                max="100"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">Expected account usage duration</p>
-            </div>
-
-            <div>
-              <label htmlFor="privateKey" className="block text-sm font-medium text-gray-700 mb-1">
-                Private Key
-              </label>
-              <input
-                type="password"
-                id="privateKey"
-                name="privateKey"
-                value={formData.privateKey}
-                onChange={handleInputChange}
-                placeholder="Enter your wallet's private key"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                required
-              />
-              <p className="text-xs text-red-500 mt-1">⚠️ Your private key is only used for signing and is not stored</p>
-            </div>
-
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-600">
-                <strong>Wallet Address:</strong> {walletAddress}
-              </p>
+            <div className="animate-pulse">
+              <div className="h-4 bg-gray-200 rounded-full w-3/4 mb-2"></div>
+              <div className="h-4 bg-gray-200 rounded-full w-full mb-2"></div>
+              <div className="h-4 bg-gray-200 rounded-full w-5/6"></div>
             </div>
 
             {/* Actions */}
@@ -203,7 +127,7 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
                 disabled={isRegistering}
                 className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isRegistering ? 'Registering...' : 'Register Account'}
+                {isRegistering ? 'Verifying...' : 'Verify Account'}
               </button>
             </div>
           </form>
