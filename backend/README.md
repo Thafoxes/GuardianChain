@@ -79,9 +79,34 @@ npm test
 
 ## Deployment
 
+### Local Development (Localnet)
+
+1. **Start Oasis Sapphire Localnet:**
+```bash
+# Using Docker (recommended)
+docker run -it -p8545:8545 -p8546:8546 ghcr.io/oasisprotocol/sapphire-localnet -test-mnemonic
+
+# Or using the Oasis CLI
+oasis test-net run-simple --fixture.default.num_entities=1
+```
+
+2. **Deploy to Localnet:**
+```bash
+npm run localnet-deploy
+```
+
+3. **Fund test accounts:**
+The localnet provides pre-funded accounts. Use the test mnemonic to access them:
+```
+Test mnemonic: "test test test test test test test test test test test junk"
+```
+
+4. **Contract addresses:**
+After deployment, contract addresses will be saved to `deployments/localhost/` and displayed in the console.
+
 ### Testnet Deployment
 
-1. **Fund your wallet** with ROSE tokens from the [Sapphire Testnet Faucet](https://faucet.testnet.oasis.dev/)
+1. **Fund your wallet** with TEST tokens from the [Sapphire Testnet Faucet](https://faucet.testnet.oasis.dev/)
 
 2. **Deploy to Sapphire Testnet:**
 ```bash
@@ -167,6 +192,13 @@ npx hardhat test test/GuardianChain.test.js
 ```
 
 ## Network Configuration
+
+### Sapphire Localnet (Development)
+- **Chain ID**: 0x5afd (23293)
+- **RPC URL**: http://localhost:8545
+- **WebSocket**: ws://localhost:8546
+- **Block Explorer**: http://localhost:8548 (if available)
+- **Currency**: TEST tokens
 
 ### Sapphire Testnet
 - **Chain ID**: 0x5aff (23295)
@@ -298,3 +330,13 @@ MIT License - see LICENSE file for details.
 - Built on [Oasis Sapphire](https://oasisprotocol.org/sapphire) for privacy features
 - Inspired by decentralized reporting and verification systems
 - Uses [Hardhat](https://hardhat.org/) development framework
+
+
+# Specific test commands
+
+npm test - Run all tests
+npm run test:verbose - Detailed test output
+npm run test:gas - Gas usage reporting
+npm run full-demo - Complete workflow demo
+npm run content-test - Encryption testing
+npm run localnet-demo - Docker localnet testing
