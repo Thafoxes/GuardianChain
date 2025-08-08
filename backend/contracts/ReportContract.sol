@@ -97,9 +97,8 @@ contract ReportContract {
         reportCounter++;
         uint256 reportId = reportCounter;
         
-        // Generate encryption key using reporter's address and secure randomness
-        bytes memory seed = Sapphire.randomBytes(32, "report_encryption");
-        bytes32 encryptionKey = keccak256(abi.encodePacked(msg.sender, reportId, seed));
+        // Generate encryption key using deterministic approach
+        bytes32 encryptionKey = keccak256(abi.encodePacked(msg.sender, reportId, "report_encryption_key"));
         
         // Encrypt the report content
         bytes memory nonceBytes = Sapphire.randomBytes(12, "report_nonce");
@@ -188,7 +187,6 @@ contract ReportContract {
      */
     function getReportContent(uint256 reportId) 
         external 
-        view 
         reportExists(reportId) 
         returns (string memory) 
     {
@@ -211,9 +209,8 @@ contract ReportContract {
             encryptedData[i - 12] = report.encryptedContent[i];
         }
         
-        // Regenerate the same encryption key
-        bytes memory seed = Sapphire.randomBytes(32, "report_encryption");
-        bytes32 encryptionKey = keccak256(abi.encodePacked(report.reporter, reportId, seed));
+        // Regenerate the same encryption key (deterministic)
+        bytes32 encryptionKey = keccak256(abi.encodePacked(report.reporter, reportId, "report_encryption_key"));
         
         // Decrypt the content
         bytes memory decryptedBytes = Sapphire.decrypt(

@@ -58,9 +58,8 @@ contract UserVerification {
         require(!isRegistered[msg.sender], "User already registered");
         require(bytes(identifier).length > 0, "Identifier cannot be empty");
         
-        // Generate encryption key using Sapphire's secure randomness
-        bytes memory seed = Sapphire.randomBytes(32, "user_registration");
-        bytes32 encryptionKey = keccak256(abi.encodePacked(msg.sender, seed));
+        // Generate encryption key using deterministic approach
+        bytes32 encryptionKey = keccak256(abi.encodePacked(msg.sender, "user_registration_key"));
         
         // Encrypt the identifier
         bytes memory nonceBytes = Sapphire.randomBytes(12, "nonce");
@@ -122,7 +121,7 @@ contract UserVerification {
      * @dev Get user's own decrypted identifier
      * @return The decrypted identifier string
      */
-    function getMyIdentifier() external view onlyRegisteredUser returns (string memory) {
+    function getMyIdentifier() external onlyRegisteredUser returns (string memory) {
         UserMetadata memory metadata = userMetadata[msg.sender];
         
         // Extract nonce and encrypted data
@@ -138,9 +137,8 @@ contract UserVerification {
             encryptedData[i - 12] = metadata.encryptedIdentifier[i];
         }
         
-        // Regenerate the same encryption key
-        bytes memory seed = Sapphire.randomBytes(32, "user_registration");
-        bytes32 encryptionKey = keccak256(abi.encodePacked(msg.sender, seed));
+        // Regenerate the same encryption key (deterministic)
+        bytes32 encryptionKey = keccak256(abi.encodePacked(msg.sender, "user_registration_key"));
         
         // Decrypt the identifier
         bytes memory decryptedBytes = Sapphire.decrypt(
@@ -151,6 +149,27 @@ contract UserVerification {
         );
         
         return string(decryptedBytes);
+    }
+    
+    /**
+     * @dev Simple test function to verify modifier works
+     */
+    function testModifier() external onlyRegisteredUser returns (bool) {
+        return true;
+    }
+    
+    /**
+     * @dev Get registration status without modifier
+     */
+    function checkMyRegistration() external view returns (bool) {
+        return isRegistered[msg.sender];
+    }
+    
+    /**
+     * @dev Debug function to see what address is being used
+     */
+    function debugMsgSender() external returns (address, bool) {
+        return (msg.sender, isRegistered[msg.sender]);
     }
     
     /**
