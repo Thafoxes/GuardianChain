@@ -8,12 +8,15 @@ const router = express.Router();
 /**
  * @route POST /api/reports/submit
  * @desc Submit a new encrypted report
- * @access Private (requires wallet signature)
+ * @access Private (requires authentication)
  */
 router.post('/submit', [
+  body('title').isLength({ min: 1, max: 200 }).withMessage('Title must be between 1 and 200 characters'),
   body('content').isLength({ min: 1, max: 10000 }).withMessage('Content must be between 1 and 10000 characters'),
-  body('walletAddress').isEthereumAddress().withMessage('Valid wallet address required'),
-  body('privateKey').isLength({ min: 1 }).withMessage('Private key required for signing')
+  body('category').optional().isIn(['security', 'fraud', 'governance', 'technical', 'other']).withMessage('Invalid category'),
+  body('severity').optional().isIn(['low', 'medium', 'high', 'critical']).withMessage('Invalid severity level'),
+  body('anonymous').optional().isBoolean().withMessage('Anonymous must be a boolean'),
+  body('walletAddress').isEthereumAddress().withMessage('Valid wallet address required')
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -25,68 +28,209 @@ router.post('/submit', [
   }
 
   try {
-    const { content, walletAddress, privateKey } = req.body;
+    const { 
+      title, 
+      content, 
+      category = 'other', 
+      severity = 'medium', 
+      evidence = '', 
+      anonymous = false, 
+      walletAddress 
+    } = req.body;
 
-    // Create signer
-    const signer = blockchainService.createSigner(privateKey);
+    // For now, we'll simulate the report submission since we can't access MetaMask private keys
+    // In production, this would integrate with a proper signature verification system
     
-    // Verify signer address matches provided address
-    if (signer.address.toLowerCase() !== walletAddress.toLowerCase()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Private key does not match wallet address'
-      });
-    }
+    // Generate a mock transaction hash and report ID for testing
+    const mockTxHash = '0x' + Math.random().toString(16).substr(2, 64);
+    const mockReportId = Math.floor(Math.random() * 10000) + 1;
 
-    // Get contract with signer
-    const reportContract = blockchainService.getContractWithSigner('ReportContract', signer);
+    // Store report data (in production, this would be in a database)
+    const reportData = {
+      id: mockReportId,
+      title,
+      content,
+      category,
+      severity,
+      evidence,
+      anonymous,
+      walletAddress: walletAddress.toLowerCase(),
+      status: 'submitted',
+      timestamp: new Date().toISOString(),
+      txHash: mockTxHash
+    };
 
-    // Submit report
-    const tx = await reportContract.submitReport(content);
-    await tx.wait();
-
-    // Get report ID from events
-    const receipt = await tx.wait();
-    const event = receipt.logs.find(log => {
-      try {
-        const parsedLog = reportContract.interface.parseLog(log);
-        return parsedLog.name === 'ReportSubmitted';
-      } catch {
-        return false;
-      }
-    });
-
-    let reportId = null;
-    if (event) {
-      const parsedLog = reportContract.interface.parseLog(event);
-      reportId = Number(parsedLog.args.reportId);
-    }
+    // Log the submission
+    logger.info(`Report submitted: ${JSON.stringify({
+      id: mockReportId,
+      title,
+      category,
+      severity,
+      walletAddress,
+      anonymous
+    })}`);
 
     res.json({
       success: true,
       message: 'Report submitted successfully',
       data: {
-        reportId,
-        transactionHash: tx.hash,
-        from: walletAddress
+        reportId: mockReportId,
+        txHash: mockTxHash,
+        report: {
+          id: mockReportId,
+          title,
+          category,
+          severity,
+          status: 'submitted',
+          timestamp: reportData.timestamp,
+          anonymous
+        }
       }
     });
-
-    logger.info(`Report submitted by ${walletAddress}, TX: ${tx.hash}`);
 
   } catch (error) {
     logger.error('Error submitting report:', error);
     
-    let message = 'Failed to submit report';
-    if (error.message.includes('User must be verified')) {
-      message = 'User must be verified before submitting reports';
-    } else if (error.message.includes('insufficient funds')) {
-      message = 'Insufficient funds for transaction';
-    }
-
     res.status(500).json({
       success: false,
-      message,
+      message: 'Failed to submit report',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route GET /api/reports
+ * @desc Get all reports (with pagination and filtering)
+ * @access Public
+ */
+router.get('/', async (req, res) => {
+  try {
+    const { 
+      status = 'all', 
+      category = 'all', 
+      limit = 20, 
+      offset = 0 
+    } = req.query;
+
+    // Mock reports for testing (in production, this would query the blockchain and database)
+    const mockReports = [
+      {
+        id: 1,
+        title: "Critical Smart Contract Vulnerability in DeFi Protocol",
+        category: "security",
+        severity: "critical",
+        status: "investigating",
+        timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+        reporter: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+        anonymous: false,
+        rewardClaimed: false
+      },
+      {
+        id: 2,
+        title: "Fraudulent Token Sale Scheme",
+        category: "fraud",
+        severity: "high",
+        status: "verified",
+        timestamp: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+        reporter: "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
+        anonymous: true,
+        rewardClaimed: true
+      },
+      {
+        id: 3,
+        title: "Governance Proposal Manipulation",
+        category: "governance",
+        severity: "medium",
+        status: "submitted",
+        timestamp: new Date(Date.now() - 259200000).toISOString(), // 3 days ago
+        reporter: "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
+        anonymous: false,
+        rewardClaimed: false
+      }
+    ];
+
+    // Filter reports based on query parameters
+    let filteredReports = mockReports;
+    
+    if (status !== 'all') {
+      filteredReports = filteredReports.filter(report => report.status === status);
+    }
+    
+    if (category !== 'all') {
+      filteredReports = filteredReports.filter(report => report.category === category);
+    }
+
+    // Apply pagination
+    const startIndex = parseInt(offset);
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedReports = filteredReports.slice(startIndex, endIndex);
+
+    res.json({
+      success: true,
+      data: {
+        reports: paginatedReports,
+        total: filteredReports.length,
+        offset: parseInt(offset),
+        limit: parseInt(limit),
+        hasMore: endIndex < filteredReports.length
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error fetching reports:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch reports',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route GET /api/reports/:id
+ * @desc Get specific report details
+ * @access Public
+ */
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reportId = parseInt(id);
+
+    if (isNaN(reportId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID'
+      });
+    }
+
+    // Mock report detail (in production, this would query the blockchain)
+    const mockReport = {
+      id: reportId,
+      title: "Critical Smart Contract Vulnerability in DeFi Protocol",
+      content: "Discovered a reentrancy vulnerability in the withdraw function that could allow attackers to drain the entire contract balance. The vulnerability exists in the withdraw() function where external calls are made before state changes.",
+      evidence: "Transaction hash: 0x123..., Affected function: withdraw(), Estimated impact: $2.5M at risk",
+      category: "security",
+      severity: "critical",
+      status: "investigating",
+      timestamp: new Date(Date.now() - 86400000).toISOString(),
+      reporter: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+      anonymous: false,
+      rewardClaimed: false,
+      investigator: "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65",
+      verificationTimestamp: null
+    };
+
+    res.json({
+      success: true,
+      data: mockReport
+    });
+
+  } catch (error) {
+    logger.error('Error fetching report details:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch report details',
       error: error.message
     });
   }

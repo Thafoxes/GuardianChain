@@ -88,17 +88,22 @@ export const userApi = {
 // Report API
 export const reportApi = {
   submitReport: (data: {
+    title: string;
     content: string;
     category?: string;
+    evidence?: string;
+    severity?: string;
     anonymous?: boolean;
+    walletAddress?: string;
   }): Promise<ApiResponse<{ reportId: number; txHash: string }>> =>
     api.post('/reports/submit', data),
 
   getReports: (params?: {
     status?: string;
+    category?: string;
     limit?: number;
     offset?: number;
-  }): Promise<ApiResponse<{ reports: Report[]; total: number }>> =>
+  }): Promise<ApiResponse<{ reports: Report[]; total: number; hasMore: boolean }>> =>
     api.get('/reports', { params }),
 
   getReport: (id: string): Promise<ApiResponse<Report>> =>

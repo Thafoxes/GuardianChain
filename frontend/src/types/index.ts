@@ -29,16 +29,22 @@ export interface UserStats {
 
 // Report Types
 export interface Report {
-  id: string;
-  reportId: number;
+  id: number;
+  reportId?: number; // For compatibility
+  title?: string;
+  content?: string;
+  evidence?: string;
+  category?: string;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
   reporter: string;
   timestamp: string;
-  status: ReportStatus;
+  status: 'submitted' | 'investigating' | 'verified' | 'rejected';
   verifiedBy?: string;
   verificationTimestamp?: string;
-  contentHash: string;
+  contentHash?: string;
   rewardClaimed: boolean;
-  content?: string; // Decrypted content if accessible
+  anonymous?: boolean;
+  investigator?: string;
 }
 
 export enum ReportStatus {
