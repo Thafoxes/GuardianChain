@@ -23,11 +23,11 @@ async function setupUserForTesting() {
     const provider = wrap(new ethers.JsonRpcProvider('http://localhost:8545'));
     
     // Test user (the same one used in frontend)
-    const testUserPrivateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'; // First Hardhat account
+    const testUserPrivateKey = '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6'; // Second Hardhat account
     const testUser = new ethers.Wallet(testUserPrivateKey, provider);
     
-    // Admin (deployer) - has admin rights
-    const adminPrivateKey = process.env.LOCALNET_PRIVATE_KEY || testUserPrivateKey;
+    // Admin (deployer) - has admin rights (first Hardhat account)
+    const adminPrivateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'; // First Hardhat account
     const admin = new ethers.Wallet(adminPrivateKey, provider);
     
     console.log(`👤 Test User Address: ${testUser.address}`);

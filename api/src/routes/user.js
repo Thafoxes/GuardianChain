@@ -231,6 +231,50 @@ router.get('/:address/balance', async (req, res) => {
 });
 
 /**
+ * @route GET /api/users/verification-status/:address
+ * @desc Check if a user is registered and verified
+ * @access Public
+ */
+router.get('/verification-status/:address', async (req, res) => {
+  try {
+    const { address } = req.params;
+
+    if (!blockchainService.isValidAddress(address)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid wallet address'
+      });
+    }
+
+    await blockchainService.ensureInitialized();
+    const userVerification = blockchainService.getContract('UserVerification');
+    
+    const [isRegistered, isVerified] = await Promise.all([
+      userVerification.isRegistered(address),
+      userVerification.isUserVerified(address)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        address,
+        isRegistered,
+        isVerified,
+        canSubmitReports: isRegistered && isVerified
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error checking user verification status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check verification status',
+      error: error.message
+    });
+  }
+});
+
+/**
  * @route GET /api/users/stats/total
  * @desc Get total number of registered users
  * @access Public

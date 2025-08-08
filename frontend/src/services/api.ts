@@ -93,6 +93,22 @@ export const userApi = {
 
   getBalance: (): Promise<ApiResponse<{ balance: string; tokenBalance: string }>> =>
     api.get('/users/balance'),
+
+  getVerificationStatus: (address: string): Promise<ApiResponse<{
+    address: string;
+    isRegistered: boolean;
+    isVerified: boolean;
+    canSubmitReports: boolean;
+  }>> =>
+    api.get(`/users/verification-status/${address}`),
+
+  registerUser: (data: {
+    identifier: string;
+    longevity: number;
+    walletAddress: string;
+    privateKey: string;
+  }): Promise<ApiResponse<{ txHash: string }>> =>
+    api.post('/users/register', data),
 };
 
 // Report API

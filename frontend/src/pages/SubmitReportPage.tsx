@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Send, Shield, Eye, EyeOff, FileText, Tag, User } from 'lucide-react';
+import { AlertTriangle, Send, Shield, Eye, EyeOff, FileText, Tag, User, Clock, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
-import { reportApi } from '../services/api';
+import { reportApi, userApi } from '../services/api';
+import VerificationModal from '../components/VerificationModal';
 import toast from 'react-hot-toast';
 
 const SubmitReportPage = () => {
@@ -12,6 +13,13 @@ const SubmitReportPage = () => {
   const { wallet } = useWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [isCheckingVerification, setIsCheckingVerification] = useState(true);
+  const [verificationStatus, setVerificationStatus] = useState({
+    isRegistered: false,
+    isVerified: false,
+    canSubmitReports: false
+  });
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -21,6 +29,44 @@ const SubmitReportPage = () => {
     severity: 'medium',
     evidence: ''
   });
+
+  // Check user verification status when wallet is connected
+  useEffect(() => {
+    const checkVerificationStatus = async () => {
+      if (!wallet.isConnected || !wallet.address) {
+        setIsCheckingVerification(false);
+        return;
+      }
+
+      try {
+        setIsCheckingVerification(true);
+        const response = await userApi.getVerificationStatus(wallet.address);
+        if (response.data) {
+          setVerificationStatus(response.data);
+        }
+      } catch (error) {
+        console.error('Failed to check verification status:', error);
+        toast.error('Failed to check verification status');
+      } finally {
+        setIsCheckingVerification(false);
+      }
+    };
+
+    checkVerificationStatus();
+  }, [wallet.isConnected, wallet.address]);
+
+  const handleVerificationComplete = () => {
+    // Refresh verification status after registration
+    if (wallet.address) {
+      userApi.getVerificationStatus(wallet.address)
+        .then(response => {
+          if (response.data) {
+            setVerificationStatus(response.data);
+          }
+        })
+        .catch(error => console.error('Failed to refresh verification status:', error));
+    }
+  };
 
   const categories = [
     { value: 'security', label: 'Security Vulnerability', icon: Shield },
@@ -56,9 +102,26 @@ const SubmitReportPage = () => {
       return;
     }
 
+    if (!wallet.address) {
+      toast.error('Wallet address not available');
+      return;
+    }
+
     if (!auth.isAuthenticated) {
       toast.error('Please login first');
       return;
+    }
+
+    // Check verification status before submission
+    if (!verificationStatus.canSubmitReports) {
+      if (!verificationStatus.isRegistered) {
+        toast.error('Please register your account first');
+        setShowVerificationModal(true);
+        return;
+      } else if (!verificationStatus.isVerified) {
+        toast.error('Your account is not verified yet. Please wait for admin approval.');
+        return;
+      }
     }
 
     if (!formData.title.trim() || !formData.content.trim()) {
@@ -95,6 +158,106 @@ const SubmitReportPage = () => {
 
   const selectedCategory = categories.find(cat => cat.value === formData.category);
   const selectedSeverity = severityLevels.find(sev => sev.value === formData.severity);
+
+  // Show loading screen while checking verification
+  if (isCheckingVerification) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <div className="text-center">
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">Checking Account Status</h2>
+                <p className="text-gray-600">Verifying your account permissions...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show verification required message if not verified
+  if (wallet.isConnected && !verificationStatus.canSubmitReports) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Header */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
+            <div className="flex items-center space-x-3">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-blue-600" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Submit Report</h1>
+                <p className="text-gray-600 mt-1">
+                  Report security issues, fraud, or other concerns confidentially and securely
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Verification Required */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <UserCheck className="w-8 h-8 text-amber-600" />
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">Account Verification Required</h2>
+              
+              {!verificationStatus.isRegistered ? (
+                <div>
+                  <p className="text-gray-600 mb-6">
+                    You need to register your account before you can submit reports to the blockchain.
+                  </p>
+                  <button
+                    onClick={() => setShowVerificationModal(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                  >
+                    Register Account
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-gray-600 mb-4">
+                    Your account is registered but awaiting admin verification.
+                  </p>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="w-5 h-5 text-amber-600" />
+                      <span className="text-amber-800 font-medium">Pending Verification</span>
+                    </div>
+                    <p className="text-amber-700 text-sm mt-1">
+                      Please wait for an administrator to verify your account. This usually takes a few minutes.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleVerificationComplete}
+                    className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                  >
+                    Refresh Status
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Verification Modal */}
+          {wallet.address && (
+            <VerificationModal
+              isOpen={showVerificationModal}
+              onClose={() => setShowVerificationModal(false)}
+              walletAddress={wallet.address}
+              onVerificationComplete={handleVerificationComplete}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -351,6 +514,16 @@ const SubmitReportPage = () => {
             )}
           </div>
         </div>
+
+        {/* Verification Modal */}
+        {wallet.address && (
+          <VerificationModal
+            isOpen={showVerificationModal}
+            onClose={() => setShowVerificationModal(false)}
+            walletAddress={wallet.address}
+            onVerificationComplete={handleVerificationComplete}
+          />
+        )}
       </div>
     </div>
   );
