@@ -6,6 +6,47 @@ import { logger } from '../utils/logger.js';
 const router = express.Router();
 
 /**
+ * @route GET /api/reports/debug
+ * @desc Debug endpoint to check environment variables and blockchain status
+ * @access Public
+ */
+router.get('/debug', async (req, res) => {
+  try {
+    // Ensure blockchain service is initialized
+    await blockchainService.ensureInitialized();
+
+    const debug = {
+      environment: {
+        NETWORK: process.env.NETWORK,
+        REWARD_TOKEN_ADDRESS: process.env.REWARD_TOKEN_ADDRESS,
+        USER_VERIFICATION_ADDRESS: process.env.USER_VERIFICATION_ADDRESS,
+        REPORT_CONTRACT_ADDRESS: process.env.REPORT_CONTRACT_ADDRESS,
+        NODE_ENV: process.env.NODE_ENV
+      },
+      blockchain: {
+        providerConnected: !!blockchainService.provider,
+        contractsLoaded: Object.keys(blockchainService.contracts),
+        contractCount: Object.keys(blockchainService.contracts).length
+      }
+    };
+
+    logger.info('Debug info requested:', debug);
+
+    res.json({
+      success: true,
+      data: debug
+    });
+  } catch (error) {
+    logger.error('Debug endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Debug failed',
+      error: error.message
+    });
+  }
+});
+
+/**
  * @route POST /api/reports/submit
  * @desc Submit a new encrypted report
  * @access Private (requires authentication)
@@ -28,6 +69,9 @@ router.post('/submit', [
   }
 
   try {
+    // Ensure blockchain service is initialized
+    await blockchainService.ensureInitialized();
+
     const { 
       title, 
       content, 
@@ -38,62 +82,109 @@ router.post('/submit', [
       walletAddress 
     } = req.body;
 
-    // For now, we'll simulate the report submission since we can't access MetaMask private keys
-    // In production, this would integrate with a proper signature verification system
-    
-    // Generate a mock transaction hash and report ID for testing
-    const mockTxHash = '0x' + Math.random().toString(16).substr(2, 64);
-    const mockReportId = Math.floor(Math.random() * 10000) + 1;
-
-    // Store report data (in production, this would be in a database)
-    const reportData = {
-      id: mockReportId,
+    // Create the full report content to encrypt
+    const fullReportContent = JSON.stringify({
       title,
       content,
+      evidence,
       category,
       severity,
-      evidence,
       anonymous,
-      walletAddress: walletAddress.toLowerCase(),
-      status: 'submitted',
-      timestamp: new Date().toISOString(),
-      txHash: mockTxHash
-    };
+      timestamp: new Date().toISOString()
+    });
 
-    // Log the submission
-    logger.info(`Report submitted: ${JSON.stringify({
-      id: mockReportId,
+    // Get a signer using the first localnet private key (deployer account)
+    // In production, this would be handled differently with proper authentication
+    const deployerPrivateKey = process.env.LOCALNET_PRIVATE_KEY || '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+    const deployer = blockchainService.createSigner(deployerPrivateKey);
+    
+    // Get contract with deployer signer (who will submit on behalf of user)
+    const reportContract = blockchainService.getContractWithSigner('ReportContract', deployer);
+
+    // Submit report to blockchain with encrypted content
+    logger.info(`Submitting report to blockchain for user: ${walletAddress}`);
+    const tx = await reportContract.submitReport(fullReportContent);
+    const receipt = await tx.wait();
+
+    // Get report ID from the ReportSubmitted event
+    let reportId = null;
+    for (const log of receipt.logs) {
+      try {
+        const parsedLog = reportContract.interface.parseLog(log);
+        if (parsedLog.name === 'ReportSubmitted') {
+          reportId = Number(parsedLog.args.reportId);
+          logger.info(`Report submitted with ID: ${reportId}`);
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    if (!reportId) {
+      throw new Error('Failed to get report ID from transaction');
+    }
+
+    // Store additional metadata in memory/database for frontend display
+    // (the blockchain stores encrypted content, we need metadata for listing)
+    const reportMetadata = {
+      id: reportId,
       title,
       category,
       severity,
-      walletAddress,
-      anonymous
+      anonymous,
+      reporter: walletAddress.toLowerCase(),
+      status: 'submitted',
+      timestamp: new Date().toISOString(),
+      txHash: tx.hash,
+      blockNumber: receipt.blockNumber
+    };
+
+    // Log the successful submission
+    logger.info(`Report submitted successfully to blockchain: ${JSON.stringify({
+      id: reportId,
+      title,
+      category,
+      severity,
+      reporter: walletAddress,
+      txHash: tx.hash
     })}`);
 
     res.json({
       success: true,
-      message: 'Report submitted successfully',
+      message: 'Report submitted successfully to blockchain',
       data: {
-        reportId: mockReportId,
-        txHash: mockTxHash,
+        reportId,
+        txHash: tx.hash,
+        blockNumber: receipt.blockNumber,
         report: {
-          id: mockReportId,
+          id: reportId,
           title,
           category,
           severity,
           status: 'submitted',
-          timestamp: reportData.timestamp,
-          anonymous
+          timestamp: reportMetadata.timestamp,
+          anonymous,
+          reporter: walletAddress.toLowerCase()
         }
       }
     });
 
   } catch (error) {
-    logger.error('Error submitting report:', error);
+    logger.error('Error submitting report to blockchain:', error);
     
+    let message = 'Failed to submit report to blockchain';
+    if (error.message.includes('User must be verified')) {
+      message = 'User must be verified before submitting reports';
+    } else if (error.message.includes('insufficient funds')) {
+      message = 'Insufficient funds for transaction';
+    } else if (error.message.includes('execution reverted')) {
+      message = 'Transaction failed: ' + error.message;
+    }
+
     res.status(500).json({
       success: false,
-      message: 'Failed to submit report',
+      message,
       error: error.message
     });
   }
@@ -101,11 +192,14 @@ router.post('/submit', [
 
 /**
  * @route GET /api/reports
- * @desc Get all reports (with pagination and filtering)
+ * @desc Get all reports from blockchain (with pagination and filtering)
  * @access Public
  */
 router.get('/', async (req, res) => {
   try {
+    // Ensure blockchain service is initialized
+    await blockchainService.ensureInitialized();
+
     const { 
       status = 'all', 
       category = 'all', 
@@ -113,45 +207,44 @@ router.get('/', async (req, res) => {
       offset = 0 
     } = req.query;
 
-    // Mock reports for testing (in production, this would query the blockchain and database)
-    const mockReports = [
-      {
-        id: 1,
-        title: "Critical Smart Contract Vulnerability in DeFi Protocol",
-        category: "security",
-        severity: "critical",
-        status: "investigating",
-        timestamp: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-        reporter: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
-        anonymous: false,
-        rewardClaimed: false
-      },
-      {
-        id: 2,
-        title: "Fraudulent Token Sale Scheme",
-        category: "fraud",
-        severity: "high",
-        status: "verified",
-        timestamp: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
-        reporter: "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc",
-        anonymous: true,
-        rewardClaimed: true
-      },
-      {
-        id: 3,
-        title: "Governance Proposal Manipulation",
-        category: "governance",
-        severity: "medium",
-        status: "submitted",
-        timestamp: new Date(Date.now() - 259200000).toISOString(), // 3 days ago
-        reporter: "0x90f79bf6eb2c4f870365e785982e1f101e93b906",
-        anonymous: false,
-        rewardClaimed: false
+    const reportContract = blockchainService.getContract('ReportContract');
+    
+    // Get total number of reports from blockchain
+    const totalReports = await reportContract.getTotalReports();
+    const totalReportsNum = Number(totalReports);
+    
+    logger.info(`Fetching all reports, total on blockchain: ${totalReportsNum}`);
+    
+    const allReports = [];
+    
+    // Fetch all reports from blockchain
+    for (let i = 1; i <= totalReportsNum; i++) {
+      try {
+        const reportInfo = await reportContract.getReportInfo(i);
+        
+        const report = {
+          id: i,
+          title: `Report #${i}`, // We'll need to decrypt content to get real title
+          category: "security", // We'll need metadata for this
+          severity: "medium", // We'll need metadata for this
+          status: getStatusName(reportInfo.status).toLowerCase(),
+          timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(),
+          reporter: reportInfo.reporter,
+          anonymous: false, // We'll need metadata for this
+          rewardClaimed: reportInfo.rewardClaimed
+        };
+        
+        allReports.push(report);
+      } catch (error) {
+        logger.warn(`Skipping report ${i}: ${error.message}`);
+        continue;
       }
-    ];
+    }
+
+    const combinedReports = allReports;
 
     // Filter reports based on query parameters
-    let filteredReports = mockReports;
+    let filteredReports = combinedReports;
     
     if (status !== 'all') {
       filteredReports = filteredReports.filter(report => report.status === status);
@@ -166,11 +259,14 @@ router.get('/', async (req, res) => {
     const endIndex = startIndex + parseInt(limit);
     const paginatedReports = filteredReports.slice(startIndex, endIndex);
 
+    logger.info(`Returning ${paginatedReports.length} reports (${allReports.length} from blockchain)`);
+
     res.json({
       success: true,
       data: {
         reports: paginatedReports,
         total: filteredReports.length,
+        blockchainReports: allReports.length,
         offset: parseInt(offset),
         limit: parseInt(limit),
         hasMore: endIndex < filteredReports.length
@@ -238,7 +334,7 @@ router.get('/:id', async (req, res) => {
 
 /**
  * @route GET /api/reports/user/:address
- * @desc Get reports for a specific user
+ * @desc Get reports for a specific user from blockchain
  * @access Public
  */
 router.get('/user/:address', async (req, res) => {
@@ -253,39 +349,59 @@ router.get('/user/:address', async (req, res) => {
     }
 
     const reportContract = blockchainService.getContract('ReportContract');
-    const reportIds = await reportContract.getUserReports(address);
+    
+    // Get total number of reports to iterate through
+    const totalReports = await reportContract.getTotalReports();
+    const totalReportsNum = Number(totalReports);
+    
+    logger.info(`Fetching reports for user ${address}, total reports: ${totalReportsNum}`);
+    
+    const userReports = [];
+    
+    // Iterate through all reports and find ones by this user
+    for (let i = 1; i <= totalReportsNum; i++) {
+      try {
+        const reportInfo = await reportContract.getReportInfo(i);
+        
+        // Check if this report belongs to the requested user
+        if (reportInfo.reporter.toLowerCase() === address.toLowerCase()) {
+          const report = {
+            id: i,
+            reporter: reportInfo.reporter,
+            timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(),
+            status: getStatusName(reportInfo.status),
+            verifiedBy: reportInfo.verifiedBy === '0x0000000000000000000000000000000000000000' ? null : reportInfo.verifiedBy,
+            verificationTimestamp: reportInfo.verificationTimestamp > 0 ? 
+              new Date(Number(reportInfo.verificationTimestamp) * 1000).toISOString() : null,
+            rewardClaimed: reportInfo.rewardClaimed,
+            contentHash: reportInfo.contentHash
+          };
+          
+          userReports.push(report);
+        }
+      } catch (error) {
+        // Skip invalid reports
+        logger.warn(`Skipping report ${i}: ${error.message}`);
+        continue;
+      }
+    }
 
-    // Get detailed info for each report
-    const reports = await Promise.all(
-      reportIds.map(async (id) => {
-        const reportInfo = await reportContract.getReportInfo(id);
-        return {
-          id: Number(id),
-          reporter: reportInfo.reporter,
-          timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(),
-          status: getStatusName(reportInfo.status),
-          verifiedBy: reportInfo.verifiedBy === '0x0000000000000000000000000000000000000000' ? null : reportInfo.verifiedBy,
-          verificationTimestamp: reportInfo.verificationTimestamp > 0 ? 
-            new Date(Number(reportInfo.verificationTimestamp) * 1000).toISOString() : null,
-          rewardClaimed: reportInfo.rewardClaimed
-        };
-      })
-    );
+    logger.info(`Found ${userReports.length} reports for user ${address}`);
 
     res.json({
       success: true,
       data: {
         address,
-        reports,
-        totalReports: reports.length
+        reports: userReports,
+        totalReports: userReports.length
       }
     });
 
   } catch (error) {
-    logger.error('Error fetching user reports:', error);
+    logger.error('Error fetching user reports from blockchain:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch user reports',
+      message: 'Failed to fetch user reports from blockchain',
       error: error.message
     });
   }
@@ -557,10 +673,103 @@ router.get('/stats/total', async (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/reports/my-reports
+ * @desc Get current user's reports
+ * @access Private
+ */
+router.get('/my-reports', async (req, res) => {
+  try {
+    // Get wallet address from authorization header or query params
+    const authHeader = req.headers.authorization;
+    const walletAddress = req.query.address || req.headers['x-wallet-address'];
+    
+    if (!walletAddress) {
+      return res.status(401).json({
+        success: false,
+        message: 'Wallet address required'
+      });
+    }
+
+    if (!blockchainService.isValidAddress(walletAddress)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid wallet address'
+      });
+    }
+
+    const reportContract = blockchainService.getContract('ReportContract');
+    
+    // Get total number of reports to iterate through
+    const totalReports = await reportContract.getTotalReports();
+    const totalReportsNum = Number(totalReports);
+    
+    logger.info(`Fetching my reports for user ${walletAddress}, total reports: ${totalReportsNum}`);
+    
+    const myReports = [];
+    
+    // Iterate through all reports and find ones by this user
+    for (let i = 1; i <= totalReportsNum; i++) {
+      try {
+        const reportInfo = await reportContract.getReportInfo(i);
+        
+        // Check if this report belongs to the current user
+        if (reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase()) {
+          const report = {
+            id: i,
+            title: `My Report #${i}`, // We can enhance this with metadata
+            category: "security", // Default category, can be enhanced
+            severity: "medium", // Default severity, can be enhanced
+            reporter: reportInfo.reporter,
+            timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(),
+            status: getStatusName(reportInfo.status),
+            verifiedBy: reportInfo.verifiedBy === '0x0000000000000000000000000000000000000000' ? null : reportInfo.verifiedBy,
+            verificationTimestamp: reportInfo.verificationTimestamp > 0 ? 
+              new Date(Number(reportInfo.verificationTimestamp) * 1000).toISOString() : null,
+            rewardClaimed: reportInfo.rewardClaimed,
+            contentHash: reportInfo.contentHash,
+            anonymous: false // Default, can be enhanced with metadata
+          };
+          
+          myReports.push(report);
+        }
+      } catch (error) {
+        // Skip invalid reports
+        logger.warn(`Skipping report ${i}: ${error.message}`);
+        continue;
+      }
+    }
+
+    // Sort by timestamp (newest first)
+    myReports.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    logger.info(`Found ${myReports.length} reports for user ${walletAddress}`);
+
+    res.json({
+      success: true,
+      data: myReports
+    });
+
+  } catch (error) {
+    logger.error('Error fetching my reports:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch your reports',
+      error: error.message
+    });
+  }
+});
+
 // Helper function to convert status enum to string
 function getStatusName(status) {
-  const statusNames = ['Pending', 'Investigating', 'Verified', 'Rejected', 'Closed'];
-  return statusNames[status] || 'Unknown';
+  const statusNames = {
+    0: 'submitted',    // Pending
+    1: 'investigating', // Investigating  
+    2: 'verified',     // Verified
+    3: 'rejected',     // Rejected
+    4: 'closed'        // Closed
+  };
+  return statusNames[status] || 'unknown';
 }
 
 export default router;

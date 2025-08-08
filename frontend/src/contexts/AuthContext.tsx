@@ -61,10 +61,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           loading: false,
         });
 
-        // Store token if provided
+        // Store token and wallet address if provided
         if (loginResponse.data.token) {
           localStorage.setItem('auth_token', loginResponse.data.token);
         }
+        localStorage.setItem('wallet_address', wallet.address);
 
         toast.success('Successfully logged in!');
       } else {
@@ -140,8 +141,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       loading: false,
     });
 
-    // Clear stored token
+    // Clear stored token and wallet address
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('wallet_address');
     
     toast.success('Logged out successfully');
   };

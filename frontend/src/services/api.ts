@@ -10,13 +10,20 @@ const api: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor to add auth token
+// Request interceptor to add auth token and wallet address
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('auth_token');
+    const walletAddress = localStorage.getItem('wallet_address');
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    if (walletAddress) {
+      config.headers['X-Wallet-Address'] = walletAddress;
+    }
+    
     return config;
   },
   (error) => {
@@ -75,8 +82,11 @@ export const userApi = {
   getStats: (): Promise<ApiResponse<UserStats>> =>
     api.get('/users/stats'),
 
-  getUserReports: (): Promise<ApiResponse<Report[]>> =>
-    api.get('/users/reports'),
+  getUserReports: (address?: string): Promise<ApiResponse<Report[]>> =>
+    address ? api.get(`/reports/user/${address}`) : api.get('/reports/my-reports'),
+
+  getMyReports: (): Promise<ApiResponse<Report[]>> =>
+    api.get('/reports/my-reports'),
 
   claimReward: (reportId: number): Promise<ApiResponse<{ txHash: string }>> =>
     api.post('/users/claim-reward', { reportId }),
@@ -117,6 +127,9 @@ export const reportApi = {
 
   getMyReports: (): Promise<ApiResponse<Report[]>> =>
     api.get('/reports/my-reports'),
+
+  claimReward: (reportId: number): Promise<ApiResponse<{ txHash: string }>> =>
+    api.post(`/reports/${reportId}/claim-reward`),
 };
 
 // Admin API

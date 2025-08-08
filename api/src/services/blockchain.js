@@ -19,11 +19,17 @@ class BlockchainService {
     this.provider = null;
     this.contracts = {};
     this.networkConfig = {};
-    this.init();
+    this.initialized = false;
+    // Don't auto-initialize, wait for manual call
   }
 
   async init() {
     try {
+      if (this.initialized) {
+        logger.info('🔄 Blockchain service already initialized');
+        return;
+      }
+
       // Network configuration
       this.networkConfig = {
         localnet: {
@@ -63,6 +69,13 @@ class BlockchainService {
         ReportContract: process.env.REPORT_CONTRACT_ADDRESS
       };
 
+      // Debug logging
+      logger.info('🔍 Environment variables:');
+      logger.info(`NETWORK: ${process.env.NETWORK}`);
+      logger.info(`REWARD_TOKEN_ADDRESS: ${process.env.REWARD_TOKEN_ADDRESS}`);
+      logger.info(`USER_VERIFICATION_ADDRESS: ${process.env.USER_VERIFICATION_ADDRESS}`);
+      logger.info(`REPORT_CONTRACT_ADDRESS: ${process.env.REPORT_CONTRACT_ADDRESS}`);
+
       // Initialize contracts
       if (contractAddresses.RewardToken) {
         this.contracts.RewardToken = new ethers.Contract(
@@ -91,9 +104,18 @@ class BlockchainService {
       logger.info(`🔗 Connected to ${config.name} at ${config.url}`);
       logger.info(`📋 Contracts loaded: ${Object.keys(this.contracts).join(', ')}`);
 
+      this.initialized = true;
+
     } catch (error) {
       logger.error('Failed to initialize blockchain service:', error);
       throw error;
+    }
+  }
+
+  // Ensure service is initialized before operations
+  async ensureInitialized() {
+    if (!this.initialized) {
+      await this.init();
     }
   }
 
