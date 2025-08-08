@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { WalletProvider } from './contexts/WalletContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -19,7 +18,12 @@ function App() {
   return (
     <WalletProvider>
       <AuthProvider>
-        <Router>
+        <Router
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true
+          }}
+        >
           <div className="min-h-screen flex flex-col">
             <Navbar />
             <main className="flex-1">
