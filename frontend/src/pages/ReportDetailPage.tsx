@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, User, AlertTriangle, CheckCircle, FileText, Clock, Award, Eye, Lock, Key } from 'lucide-react';
+import { ArrowLeft, Calendar, User, AlertTriangle, CheckCircle, FileText, Clock, Award, Lock } from 'lucide-react';
 import { reportApi } from '../services/api';
+import { blockchainService } from '../services/blockchain';
 import { Report } from '../types';
 import { useWallet } from '../contexts/WalletContext';
 import toast from 'react-hot-toast';
@@ -12,8 +13,6 @@ const ReportDetailPage = () => {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [decryptedContent, setDecryptedContent] = useState<any | null>(null);
-  const [showPrivateKeyModal, setShowPrivateKeyModal] = useState(false);
-  const [privateKey, setPrivateKey] = useState('');
   const [decrypting, setDecrypting] = useState(false);
 
   const statusIcons = {
@@ -59,38 +58,45 @@ const ReportDetailPage = () => {
   };
 
   const handleDecryptContent = async () => {
-    if (!wallet.address) {
+    if (!wallet.isConnected) {
       toast.error('Please connect your wallet first');
-      return;
-    }
-    setShowPrivateKeyModal(true);
-  };
-
-  const decryptReportContent = async () => {
-    if (!privateKey || !wallet.address || !id) {
-      toast.error('Missing required information for decryption');
       return;
     }
 
     try {
       setDecrypting(true);
-      const response = await reportApi.getReportContent(id, wallet.address, privateKey);
       
-      if (response.data) {
-        setDecryptedContent(response.data);
-        setShowPrivateKeyModal(false);
-        setPrivateKey('');
-        toast.success('Report content decrypted successfully');
+      // Connect to blockchain service first to get current network info
+      if (!blockchainService.isConnected()) {
+        await blockchainService.connectWallet();
       }
+
+      // Check if we're on the correct network
+      const isCorrectNetwork = await blockchainService.isCorrectNetwork();
+      if (!isCorrectNetwork) {
+        // Try to switch to the correct network
+        try {
+          await blockchainService.switchToSapphireLocalnet();
+          // Recheck after switching
+          const recheckNetwork = await blockchainService.isCorrectNetwork();
+          if (!recheckNetwork) {
+            toast.error('Failed to switch to Sapphire Localnet. Please switch manually in MetaMask.');
+            return;
+          }
+        } catch (switchError: any) {
+          toast.error(`Failed to switch network: ${switchError.message}`);
+          return;
+        }
+      }
+
+      // Decrypt the report content
+      const decryptedData = await blockchainService.getReportContent(parseInt(id!));
+      setDecryptedContent(decryptedData);
+      toast.success('Report content decrypted successfully');
+
     } catch (error: any) {
       console.error('Failed to decrypt content:', error);
-      if (error.message.includes('Not authorized')) {
-        toast.error('You are not authorized to view this report content');
-      } else if (error.message.includes('Private key does not match')) {
-        toast.error('Invalid private key for your wallet address');
-      } else {
-        toast.error('Failed to decrypt report content');
-      }
+      toast.error(error.message || 'Failed to decrypt report content');
     } finally {
       setDecrypting(false);
     }
@@ -211,10 +217,11 @@ const ReportDetailPage = () => {
                 {!decryptedContent && (
                   <button
                     onClick={handleDecryptContent}
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    disabled={decrypting}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     <Lock className="w-4 h-4 mr-2" />
-                    Decrypt Content
+                    {decrypting ? 'Decrypting...' : 'Decrypt with MetaMask'}
                   </button>
                 )}
               </div>
@@ -324,67 +331,6 @@ const ReportDetailPage = () => {
           </div>
         </div>
       </div>
-
-      {/* Private Key Modal */}
-      {showPrivateKeyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-center mb-4">
-              <Key className="w-6 h-6 text-blue-600 mr-2" />
-              <h3 className="text-lg font-semibold text-gray-900">Decrypt Report Content</h3>
-            </div>
-            
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-3">
-                To decrypt and view the full report content, please enter your private key. 
-                This is required to verify your authorization.
-              </p>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-                <div className="flex items-start">
-                  <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2 mt-0.5" />
-                  <div className="text-sm text-yellow-700">
-                    <strong>Security Notice:</strong> Your private key is used locally for authorization and is not stored or transmitted to our servers.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="mb-6">
-              <label htmlFor="privateKey" className="block text-sm font-medium text-gray-700 mb-2">
-                Private Key
-              </label>
-              <input
-                type="password"
-                id="privateKey"
-                value={privateKey}
-                onChange={(e) => setPrivateKey(e.target.value)}
-                placeholder="0x..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="flex space-x-3">
-              <button
-                onClick={() => {
-                  setShowPrivateKeyModal(false);
-                  setPrivateKey('');
-                }}
-                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                disabled={decrypting}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={decryptReportContent}
-                disabled={!privateKey || decrypting}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {decrypting ? 'Decrypting...' : 'Decrypt'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

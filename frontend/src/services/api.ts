@@ -138,6 +138,12 @@ export const reportApi = {
   getReportContent: (id: string, walletAddress: string, privateKey: string): Promise<ApiResponse<any>> =>
     api.post(`/reports/${id}/content`, { walletAddress, privateKey }),
 
+  // Direct blockchain interaction methods
+  getReportContentDirect: async (reportId: string): Promise<any> => {
+    // This will be implemented with direct MetaMask integration
+    throw new Error('Use MetaMask integration for direct contract calls');
+  },
+
   verifyReport: (id: string, status: number): Promise<ApiResponse<{ txHash: string }>> =>
     api.post(`/reports/${id}/verify`, { status }),
 
