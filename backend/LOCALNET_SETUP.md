@@ -5,7 +5,7 @@
 Make sure you're running the Oasis Sapphire localnet with proper port mapping:
 
 ```bash
-docker run -it -p8544-8548:8544-8548 ghcr.io/oasisprotocol/sapphire-localnet
+docker run -it -p8544-8548:8544-8548 ghcr.io/oasisprotocol/sapphire-localnet:latest-2025-08-05-gita4d5d8b
 ```
 
 ### Port Mapping Explanation:
