@@ -229,10 +229,7 @@ Encryption: Sapphire Network Native`;
       console.log("   📋 Events captured:");
       events.forEach(event => {
         if (event.name === 'ContentRetrieved') {
-          console.log("   🔍 ContentRetrieved Event:");
-          console.log("     - Report ID:", event.args.reportId.toString());
-          console.log("     - Accessor:", event.args.accessor);
-          console.log("     - Content:", event.args.content);
+          console.log("✅ Access granted, should be same as previous details")
         }
       });
     } catch (error) {
@@ -242,7 +239,7 @@ Encryption: Sapphire Network Native`;
 
     console.log("\n2️⃣ AUTHORIZED VERIFIER accessing encrypted report:");
     try {
-      const reportContent2 = await reportContract.connect(verifier).getReportContent.staticCall(1);
+      const reportContent2 = await reportContract.connect(verifier).getReportContent(1);
       const receipt = await reportContent2.wait();
 
       const events = receipt.logs.map(log => {
