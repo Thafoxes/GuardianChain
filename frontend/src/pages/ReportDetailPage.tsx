@@ -191,6 +191,15 @@ const ReportDetailPage = () => {
                   {report.anonymous ? 'Anonymous' : formatAddress(report.reporter || '')}
                 </div>
               </div>
+              {!report.anonymous && report.reporter && (
+                <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center text-blue-700">
+                    <User className="w-4 h-4 mr-2" />
+                    <span className="text-sm font-medium">Submitted by wallet:</span>
+                    <span className="ml-2 font-mono text-xs">{report.reporter}</span>
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="flex items-center space-x-3">
@@ -295,6 +304,11 @@ const ReportDetailPage = () => {
                   <p className="text-gray-900">
                     {report.anonymous ? 'Anonymous Reporter' : formatAddress(report.reporter || '')}
                   </p>
+                  {!report.anonymous && report.reporter && (
+                    <p className="text-xs text-gray-500 font-mono mt-1 break-all">
+                      {report.reporter}
+                    </p>
+                  )}
                 </div>
 
                 {report.investigator && (

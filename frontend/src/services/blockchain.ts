@@ -136,6 +136,8 @@ export class BlockchainService {
     }
 
     try {
+      console.log('📄 Getting report content for ID:', reportId);
+      
       // Create contract instance
       const contract = new ethers.Contract(
         REPORT_CONTRACT_ADDRESS,
@@ -143,9 +145,23 @@ export class BlockchainService {
         this.signer
       );
 
+      // First check if the report exists
+      try {
+        console.log('📄 Checking if report exists...');
+        const reportInfo = await contract.getReportInfo(reportId);
+        console.log('📄 Report info:', reportInfo);
+      } catch (infoError: any) {
+        console.error('📄 Report info error:', infoError);
+        throw new Error('Report does not exist or you do not have permission to access it.');
+      }
+
       // Call getReportContent function
+      console.log('📄 Calling getReportContent...');
       const tx = await contract.getReportContent(reportId);
+      console.log('📄 Transaction sent:', tx);
+      
       const receipt = await tx.wait();
+      console.log('📄 Transaction receipt:', receipt);
 
       // Extract content from ContentRetrieved event
       let decryptedContent = '';
@@ -158,6 +174,7 @@ export class BlockchainService {
           
           if (parsedLog && parsedLog.name === 'ContentRetrieved') {
             decryptedContent = parsedLog.args.content;
+            console.log('📄 Content retrieved from event:', decryptedContent);
             break;
           }
         } catch (parseError) {
@@ -189,7 +206,7 @@ export class BlockchainService {
       }
 
     } catch (error: any) {
-      console.error('Error getting report content:', error);
+      console.error('📄 Error getting report content:', error);
       
       if (error.message.includes('Not authorized')) {
         throw new Error('You are not authorized to view this report content. Only the reporter or authorized verifiers can access encrypted content.');
@@ -197,6 +214,9 @@ export class BlockchainService {
         throw new Error('Report not found.');
       } else if (error.message.includes('user rejected')) {
         throw new Error('Transaction was rejected by user.');
+      } else if (error.message.includes('execution reverted')) {
+        // More specific error for reverted transactions
+        throw new Error('Transaction failed. This could mean: (1) Report does not exist, (2) You are not authorized to view this content, or (3) The report ID is invalid.');
       } else {
         throw new Error(`Failed to decrypt report content: ${error.message}`);
       }
