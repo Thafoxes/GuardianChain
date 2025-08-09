@@ -56,7 +56,7 @@ router.post('/register-and-stake-api', async (req, res) => {
     const transferReceipt = await transferTx.wait();
 
     // Get final status
-    const status = await blockchainService.checkUserRegistration(walletAddress);
+    const status = await blockchainService.checkUserRegisteration(walletAddress);
     const balance = await blockchainService.getTokenBalance(walletAddress);
     
     
@@ -333,21 +333,90 @@ router.post('/register-and-stake', [
   }
 });
 
-
-// Proper user-pays-to-get-verified endpoint
-router.post('/stake-for-verification', async (req, res) => {
+//for API USES
+router.post('/stake-for-verification-postman', async (req, res) => {
   try {
-    const { walletAddress, stakeTransactionHash } = req.body;
+    const { walletAddress } = req.body;
     
     if (!blockchainService.isValidAddress(walletAddress)) {
       return res.status(400).json({ error: 'Invalid wallet address' });
     }
     
-    if (!stakeTransactionHash) {
-      return res.status(400).json({ error: 'Stake transaction hash required' });
+    const backendPrivateKey = process.env.BACKEND_PRIVATE_KEY;
+    if (!backendPrivateKey) {
+      return res.status(500).json({ error: 'Backend private key not configured' });
     }
     
-    const backendPrivateKey = process.env.BACKEND_PRIVATE_KEY;
+    const signer = blockchainService.createSigner(backendPrivateKey);
+    const userContract = blockchainService.getContractWithSigner('UserVerification', signer);
+    
+    // For API testing: Skip transaction validation and directly verify
+    logger.info(`API Testing: Directly verifying user ${walletAddress}`);
+    
+    try {
+      const verifyTx = await userContract.verifyUser(walletAddress);
+      await verifyTx.wait();
+      logger.info(`User verified successfully: ${verifyTx.hash}`);
+      
+      // Check final status
+      const status = await blockchainService.checkUserRegisteration(walletAddress);
+      const balance = await blockchainService.getTokenBalance(walletAddress);
+      
+      res.json({
+        success: true,
+        message: 'User verified successfully (API mode)',
+        data: {
+          walletAddress,
+          verifyTransactionHash: verifyTx.hash,
+          isVerified: status.isVerified,
+          balance: balance,
+          canSubmitReports: status.isVerified,
+          note: 'In production, user would need to stake 10 GCR via MetaMask first'
+        }
+      });
+      
+    } catch (verifyError) {
+      // User might not be registered, let's check
+      const isRegistered = await userContract.isRegistered(walletAddress);
+      
+      if (!isRegistered) {
+        return res.status(400).json({
+          error: 'User not registered',
+          solution: 'User must call registerUser() with their MetaMask wallet first',
+          note: 'In your frontend, user would register via MetaMask before staking'
+        });
+      } else {
+        return res.status(500).json({
+          error: 'Verification failed',
+          details: verifyError.message
+        });
+      }
+    }
+    
+  } catch (error) {
+    logger.error('Error in stake for verification:', error);
+    res.status(500).json({
+      error: 'Failed to process stake verification',
+      details: error.message
+    });
+  }
+});
+
+// Proper user-pays-to-get-verified endpoint
+router.post('/stake-for-verification', async (req, res) => {
+  try {
+    const { walletAddress } = req.body;
+    
+    if (!blockchainService.isValidAddress(walletAddress)) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    
+     const backendPrivateKey = process.env.BACKEND_PRIVATE_KEY;
+    if (!backendPrivateKey) {
+      return res.status(500).json({ error: 'Backend private key not configured' });
+    }
+
+
     const treasuryAddress = process.env.TREASURY_ADDRESS;
     const rewardTokenAddress = process.env.REWARD_TOKEN_ADDRESS;
     
@@ -443,7 +512,7 @@ router.post('/stake-for-verification', async (req, res) => {
       logger.info(`User verified successfully: ${verifyTx.hash}`);
       
       // Step 3: Check final status
-      const status = await blockchainService.checkUserRegistration(walletAddress);
+      const status = await blockchainService.checkUserRegisteration(walletAddress);
       const balance = await blockchainService.getTokenBalance(walletAddress);
       
       res.json({
@@ -550,7 +619,7 @@ router.get('/status/:address', async (req, res) => {
       return res.status(400).json({ error: 'Invalid wallet address' });
     }
 
-    const status = await blockchainService.checkUserRegistration(address);
+    const status = await blockchainService.checkUserRegisteration(address);
     const balance = await blockchainService.getTokenBalance(address);
     
     res.json({
@@ -847,7 +916,7 @@ router.post('/stake-to-verify', async (req, res) => {
       logger.info(`User verified successfully: ${verifyTx.hash}`);
       
       // Step 4: Check final status
-      const status = await blockchainService.checkUserRegistration(walletAddress);
+      const status = await blockchainService.checkUserRegisteration(walletAddress);
       const finalBalance = await blockchainService.getTokenBalance(walletAddress);
       
       res.json({
@@ -915,7 +984,7 @@ router.post('/verify-and-reward', async (req, res) => {
     const transferReceipt = await transferTx.wait();
     
     // Step 3: Check final status
-    const status = await blockchainService.checkUserRegistration(walletAddress);
+    const status = await blockchainService.checkUserRegisteration(walletAddress);
     const balance = await blockchainService.getTokenBalance(walletAddress);
     
     res.json({

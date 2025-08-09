@@ -237,6 +237,28 @@ export const stakingApi = {
     registrationTime: string;
   }>> =>
     api.get(`/stake/user/${address}`),
+
+  registerUser: (data: {
+    identifier: string;
+    longevity: number;
+    walletAddress: string;
+  }): Promise<ApiResponse<{
+    success: boolean;
+    message: string;
+    txHash?: string;
+  }>> =>
+    api.post('/stake/register-user', data),
+
+  stakeForVerification: (data: {
+    walletAddress: string;
+    stakeTransactionHash: string;
+  }): Promise<ApiResponse<{
+    success: boolean;
+    message: string;
+    verified: boolean;
+    stakeAmount: string;
+  }>> =>
+    api.post('/stake/stake-for-verification', data),
 };
 
 // Blockchain API (for network info)

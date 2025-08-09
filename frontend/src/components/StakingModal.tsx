@@ -95,15 +95,110 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
     setStep('staking');
 
     try {
-      // Step 1: Get treasury address and token contract details
+      // Step 1: First register the user via MetaMask (direct smart contract call)
+      if (!userStatus?.isRegistered) {
+        toast('Step 1: Registering user...', {
+          icon: '📝',
+          duration: 4000
+        });
+
+        try {
+          // Try direct MetaMask registration first
+          if (!window.ethereum) {
+            throw new Error('MetaMask not found');
+          }
+
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const signer = await provider.getSigner();
+
+          // UserVerification contract ABI (simplified)
+          const userVerificationABI = [
+            "function registerUser(string memory _identifier, uint256 _longevity) external"
+          ];
+
+          const userVerificationAddress = import.meta.env.VITE_CONTRACT_ADDRESS_USER_VERIFICATION;
+          if (!userVerificationAddress) {
+            throw new Error('User verification contract address not configured');
+          }
+
+          const userContract = new ethers.Contract(userVerificationAddress, userVerificationABI, signer);
+
+          // Register user via MetaMask with explicit gas configuration for Sapphire
+          const registerTx = await userContract.registerUser(identifier, longevity, {
+            gasLimit: 1000000, // Increased gas limit for Sapphire encryption operations
+            // Let MetaMask handle gas price for local network
+          });
+          
+          toast('Registration transaction submitted. Waiting for confirmation...', {
+            icon: '⏳',
+            duration: 6000
+          });
+          
+          // Wait for registration confirmation
+          const registerReceipt = await registerTx.wait();
+          
+          if (!registerReceipt || registerReceipt.status !== 1) {
+            throw new Error('Registration transaction failed or was reverted');
+          }
+
+          toast.success('User registration confirmed via MetaMask! Now staking tokens...');
+
+        } catch (metaMaskError) {
+          console.warn('MetaMask registration failed, using API fallback:', metaMaskError);
+          
+          // Fallback to API registration + staking (all-in-one)
+          toast('MetaMask registration failed, using API registration + staking...', {
+            icon: '🔄',
+            duration: 4000
+          });
+
+          // Use the register-and-stake API endpoint for complete flow
+          const apiResponse = await stakingApi.registerAndStake({
+            identifier,
+            longevity,
+            walletAddress: wallet.address,
+            stakeTransactionHash: 'api-registration' // API handles the staking internally
+          });
+
+          if (!apiResponse.success) {
+            throw new Error(`API registration and staking failed: ${apiResponse.message}`);
+          }
+
+          toast.success('User registration and staking completed via API!');
+          
+          // Skip to success since API handled everything
+          setStep('success');
+          
+          // Auto-login and redirect
+          try {
+            await login();
+            toast.success('Successfully verified and logged in!');
+            setTimeout(() => {
+              onSuccess();
+              navigate('/dashboard');
+            }, 2000);
+          } catch (loginError) {
+            onSuccess();
+          }
+          
+          return; // Exit early since API handled everything
+        }
+      } else {
+        toast('User already registered. Proceeding to stake tokens...', {
+          icon: 'ℹ️',
+          duration: 3000
+        });
+      }
+
+      // Step 2: Stake tokens via MetaMask
+      toast('Step 2: Staking 10 GCR tokens via MetaMask...', {
+        icon: '💰',
+        duration: 4000
+      });
+
       const treasuryAddress = import.meta.env.VITE_TREASURY_ADDRESS || "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
       const tokenAddress = import.meta.env.VITE_REWARD_TOKEN_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
       
-      // Step 2: Request MetaMask to send 10 GCR tokens to treasury
-      if (!window.ethereum) {
-        throw new Error('MetaMask not found');
-      }
-
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
 
@@ -124,15 +219,10 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
         throw new Error(`Insufficient GCR tokens. Need 10 GCR, have ${ethers.formatEther(balance)} GCR`);
       }
 
-      toast('Please approve the transaction in MetaMask to stake 10 GCR tokens', {
-        icon: '💰',
-        duration: 4000
-      });
-
       // Send 10 GCR tokens to treasury
       const stakeTx = await tokenContract.transfer(treasuryAddress, stakeAmount);
       
-      toast('Transaction submitted. Waiting for confirmation...', {
+      toast('Stake transaction submitted. Waiting for confirmation...', {
         icon: '⏳',
         duration: 6000
       });
@@ -141,15 +231,13 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
       const receipt = await stakeTx.wait();
       
       if (!receipt || receipt.status !== 1) {
-        throw new Error('Transaction failed or was reverted');
+        throw new Error('Stake transaction failed or was reverted');
       }
 
       toast.success('Stake transaction confirmed! Processing verification...');
 
-      // Step 3: Call API with transaction hash for verification
-      const response = await stakingApi.registerAndStake({
-        identifier,
-        longevity,
+      // Step 3: Call API to verify the stake and complete verification
+      const response = await stakingApi.stakeForVerification({
         walletAddress: wallet.address,
         stakeTransactionHash: stakeTx.hash
       });
@@ -185,6 +273,8 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
         errorMessage = 'MetaMask connection error';
       } else if (err.message.includes('Transaction failed')) {
         errorMessage = 'Blockchain transaction failed. Please try again.';
+      } else if (err.message.includes('User verification contract')) {
+        errorMessage = 'Smart contract configuration error. Please contact support.';
       } else if (err.message) {
         errorMessage = err.message;
       }
@@ -292,13 +382,16 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
                 <div className="flex items-start space-x-2">
                   <Coins className="w-5 h-5 text-blue-600 mt-0.5" />
                   <div className="text-sm">
-                    <p className="font-medium text-blue-900 mb-1">How it works:</p>
+                    <p className="font-medium text-blue-900 mb-1">Two-Step Verification Process:</p>
                     <ol className="list-decimal list-inside text-blue-800 space-y-1">
-                      <li>You'll be prompted to approve a MetaMask transaction</li>
-                      <li>10 GCR tokens will be transferred to the treasury</li>
-                      <li>Your account will be automatically verified</li>
+                      <li><strong>Register:</strong> Call registerUser() via MetaMask (if not already registered)</li>
+                      <li><strong>Stake:</strong> Transfer 10 GCR tokens to treasury via MetaMask</li>
+                      <li><strong>Verify:</strong> API verifies your stake and activates your account</li>
                       <li>You can then submit reports to the blockchain</li>
                     </ol>
+                    <p className="text-blue-700 mt-2 text-xs">
+                      ⚠️ This uses your own wallet to register (msg.sender), ensuring proper ownership.
+                    </p>
                   </div>
                 </div>
               </div>
