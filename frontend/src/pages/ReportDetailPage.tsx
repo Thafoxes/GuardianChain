@@ -89,10 +89,30 @@ const ReportDetailPage = () => {
         }
       }
 
-      // Decrypt the report content
-      const decryptedData = await blockchainService.getReportContent(parseInt(id!));
-      setDecryptedContent(decryptedData);
-      toast.success('Report content decrypted successfully');
+      // Check if user is authorized to view this report
+      if (!wallet.address) {
+        toast.error('Please connect your wallet to view report content');
+        return;
+      }
+
+      // Use API to get decrypted content (with proper authorization)
+      try {
+        const response = await reportApi.getReportContent(id!, wallet.address);
+        if (response.success && response.data) {
+          setDecryptedContent(response.data);
+          toast.success('Report content decrypted successfully');
+        } else {
+          throw new Error(response.message || 'Unauthorized to view this report');
+        }
+      } catch (apiError: any) {
+        // If API fails due to authorization, show appropriate message
+        if (apiError.message?.includes('authorized') || apiError.response?.status === 403) {
+          toast.error('You are not authorized to view this report content. Only the reporter or authorized verifiers can access it.');
+        } else {
+          toast.error(apiError.message || 'Failed to decrypt report content');
+        }
+        throw apiError;
+      }
 
     } catch (error: any) {
       console.error('Failed to decrypt content:', error);

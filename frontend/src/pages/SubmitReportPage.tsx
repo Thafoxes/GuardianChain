@@ -242,24 +242,15 @@ const SubmitReportPage = () => {
       await blockchainService.initializeFromExistingProvider();
 
       // Prepare encrypted content
-      const reportContent = JSON.stringify({
-        title: formData.title.trim(),
-        content: formData.content.trim(),
-        evidence: formData.evidence.trim(),
-        category: formData.category,
-        severity: formData.severity,
-        anonymous: formData.anonymous,
-        timestamp: new Date().toISOString()
-      });
-
       console.log('📝 Submitting report via API...');
       
       // Submit via API (which handles Sapphire encryption and gas payments)
       const response = await reportApi.submitReport({
         walletAddress: wallet.address,
-        title: formData.title,
+        title: formData.title.trim(),
         category: formData.category,
-        content: reportContent,
+        content: formData.content.trim(),
+        evidence: formData.evidence.trim(),
         anonymous: formData.anonymous,
         severity: formData.severity
       });

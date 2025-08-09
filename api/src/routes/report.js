@@ -495,6 +495,181 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
+ * @route POST /api/reports/:id/content-authorized
+ * @desc Get decrypted content of a report (for authorized users only - no private key required)
+ * @access Private (requires wallet address authorization check)
+ */
+router.post('/:id/content-authorized', [
+  body('walletAddress').isEthereumAddress().withMessage('Valid wallet address required')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { id } = req.params;
+    const { walletAddress } = req.body;
+    const reportId = parseInt(id);
+
+    if (isNaN(reportId) || reportId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID'
+      });
+    }
+
+    // Ensure blockchain is initialized
+    await blockchainService.ensureInitialized();
+
+    // Use backend signer to access the blockchain (since we need a signer for contract calls)
+    const backendPrivateKey = process.env.TESTNET_PRIVATE_KEY;
+    if (!backendPrivateKey) {
+      return res.status(500).json({
+        success: false,
+        message: 'Backend configuration error'
+      });
+    }
+
+    const backendSigner = blockchainService.createSigner(backendPrivateKey);
+    const reportContract = blockchainService.getContractWithSigner('ReportContract', backendSigner);
+    const userContract = blockchainService.getContract('UserVerification');
+
+    // First check if report exists and get report info
+    let reportInfo;
+    try {
+      reportInfo = await reportContract.getReportInfo(reportId);
+    } catch (error) {
+      if (error.message.includes('Report does not exist')) {
+        return res.status(404).json({
+          success: false,
+          message: 'Report not found'
+        });
+      }
+      throw error;
+    }
+
+    // SECURITY CHECK: Verify authorization before allowing decryption
+    const isReporter = reportInfo.reporter && reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase();
+    
+    // Check if user is an authorized verifier
+    let isVerifier = false;
+    try {
+      isVerifier = await reportContract.authorizedVerifiers(walletAddress);
+    } catch (error) {
+      logger.warn('Could not check verifier status:', error.message);
+    }
+    
+    // Check if user is admin
+    let isAdmin = false;
+    try {
+      const adminAddress = await userContract.admin();
+      isAdmin = adminAddress.toLowerCase() === walletAddress.toLowerCase();
+    } catch (error) {
+      logger.warn('Could not check admin status:', error.message);
+    }
+
+    // AUTHORIZATION: Only allow decryption if user is reporter, verifier, or admin
+    if (!isReporter && !isVerifier && !isAdmin) {
+      logger.warn(`Unauthorized decryption attempt by ${walletAddress} for report ${reportId}. Reporter: ${reportInfo.reporter}`);
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to access this report',
+        error: 'UNAUTHORIZED_ACCESS',
+        details: {
+          reason: 'You can only access reports if you are:',
+          requirements: [
+            'The original reporter who submitted this report',
+            'An authorized verifier',
+            'An admin'
+          ],
+          yourStatus: {
+            isReporter,
+            isVerifier,
+            isAdmin
+          },
+          reportDetails: {
+            id: reportId,
+            reporter: reportInfo.reporter ? reportInfo.reporter.toString() : 'Unknown'
+          },
+          requestedBy: walletAddress
+        }
+      });
+    }
+
+    logger.info(`Authorized decryption for report ${reportId} by ${walletAddress} (Reporter: ${isReporter}, Verifier: ${isVerifier}, Admin: ${isAdmin})`);
+
+    // Get decrypted content using backend signer (which has access)
+    try {
+      const tx = await reportContract.getReportContent(reportId);
+      const receipt = await tx.wait();
+
+      // Extract content from ContentRetrieved event
+      let decryptedContent = null;
+      for (const log of receipt.logs) {
+        try {
+          const parsedLog = reportContract.interface.parseLog(log);
+          if (parsedLog.name === 'ContentRetrieved') {
+            decryptedContent = parsedLog.args.content;
+            break;
+          }
+        } catch (parseError) {
+          // Not the log we're looking for, continue
+          continue;
+        }
+      }
+
+      if (!decryptedContent) {
+        throw new Error('Could not extract content from transaction logs');
+      }
+
+      // Parse the JSON content
+      const contentData = JSON.parse(decryptedContent);
+
+      logger.info(`Content retrieved successfully for report ${reportId} by authorized user ${walletAddress}`);
+
+      res.json({
+        success: true,
+        data: {
+          reportId,
+          ...contentData,
+          accessGrantedTo: walletAddress,
+          accessReason: isReporter ? 'reporter' : isVerifier ? 'verifier' : 'admin'
+        }
+      });
+
+    } catch (error) {
+      logger.error('Error retrieving content:', error);
+      
+      if (error.message.includes('Only reporter')) {
+        return res.status(403).json({
+          success: false,
+          message: 'Not authorized to view this report content. Only the reporter or authorized verifiers can access encrypted content.'
+        });
+      }
+
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve report content',
+        error: error.message
+      });
+    }
+
+  } catch (error) {
+    logger.error('Error in content retrieval:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
+/**
  * @route POST /api/reports/:id/content
  * @desc Get decrypted content of a report (for authorized users only)
  * @access Private (requires wallet signature)

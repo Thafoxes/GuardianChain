@@ -4,7 +4,7 @@ import { ApiResponse, User, Report, UserStats, AdminStats, NetworkInfo } from '.
 // Create axios instance
 const api: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api',
-  timeout: 10000,
+  timeout: 30000, // Increased to 30 seconds for blockchain operations
   headers: {
     'Content-Type': 'application/json',
   },
@@ -156,14 +156,11 @@ export const reportApi = {
   getReport: (id: string): Promise<ApiResponse<Report>> =>
     api.get(`/reports/${id}`),
 
-  getReportContent: (id: string, walletAddress: string, privateKey: string): Promise<ApiResponse<any>> =>
-    api.post(`/reports/${id}/content`, { walletAddress, privateKey }),
+  getReportContent: (id: string, walletAddress: string): Promise<ApiResponse<any>> =>
+    api.post(`/reports/${id}/content-authorized`, { walletAddress }),
 
-  // Direct blockchain interaction methods
-  getReportContentDirect: async (reportId: string): Promise<any> => {
-    // This will be implemented with direct MetaMask integration
-    throw new Error('Use MetaMask integration for direct contract calls');
-  },
+  getReportContentLegacy: (id: string, walletAddress: string, privateKey: string): Promise<ApiResponse<any>> =>
+    api.post(`/reports/${id}/content`, { walletAddress, privateKey }),
 
   verifyReport: (id: string, status: number): Promise<ApiResponse<{ txHash: string }>> =>
     api.post(`/reports/${id}/verify`, { status }),
