@@ -1,3 +1,5 @@
 frontend/.env
 description.txt
 frontend/.env
+docker-compose.local.yml
+frontend/.env
