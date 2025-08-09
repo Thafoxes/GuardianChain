@@ -30,13 +30,16 @@ export default function Page() {
         setIsCheckingVerification(false);
     }, []);
 
-    const categories = [
-        { value: "security", label: "Security Vulnerability", icon: Shield },
-        { value: "fraud", label: "Fraud/Scam", icon: AlertTriangle },
-        { value: "governance", label: "Governance Issue", icon: FileText },
-        { value: "technical", label: "Technical Issue", icon: Tag },
-        { value: "other", label: "Other", icon: FileText },
-    ];
+    const categories = useMemo(
+        () => [
+            { value: "security", label: "Security Vulnerability", icon: Shield },
+            { value: "fraud", label: "Fraud/Scam", icon: AlertTriangle },
+            { value: "governance", label: "Governance Issue", icon: FileText },
+            { value: "technical", label: "Technical Issue", icon: Tag },
+            { value: "other", label: "Other", icon: FileText },
+        ],
+        []
+    );
 
     const severityLevels = [
         { value: "low", label: "Low", color: "text-green-600", bg: "bg-green-50" },
@@ -58,11 +61,7 @@ export default function Page() {
 
     const selectedCategory = useMemo(
         () => categories.find((cat) => cat.value === formData.category),
-        [formData.category]
-    );
-    const selectedSeverity = useMemo(
-        () => severityLevels.find((sev) => sev.value === formData.severity),
-        [formData.severity]
+        [categories, formData.category]
     );
 
     if (isCheckingVerification) {
