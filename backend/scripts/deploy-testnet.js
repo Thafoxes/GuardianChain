@@ -74,6 +74,17 @@ async function main() {
   // UserVerification automatically sets deployer as admin in constructor
   console.log("✅ Deployer is already set as admin for UserVerification");
 
+  // IMPORTANT: Add the deployer as an authorized verifier
+  console.log("\n👮 Setting up deployer as authorized verifier...");
+  try {
+    const addVerifierTx = await reportContract.addVerifier(deployer.address);
+    await addVerifierTx.wait();
+    console.log("✅ Deployer added as authorized verifier");
+  } catch (error) {
+    console.log("⚠️ Warning: Could not add deployer as verifier:", error.message);
+    console.log("   You can add verifiers manually through the admin interface");
+  }
+
   // Save deployment info
   const deploymentInfo = {
     network: "sapphire-testnet",

@@ -1,7 +1,0 @@
-when I am an admin I want to grade the submittede report to completed or cancel based on the report contract.sol then I want to reward the user for helping sending the report.
-
-for the admin page, this is missing the component to grade the report.
-Can you add it in? I want to add it after the reward status 
-show a feedback after the submission is sent with like reporter is awarded with tokens,
-if is declined reply with report is rejected and no reward is send to the reporter. 
-Those report that are submitted will not be update again. 

@@ -17,6 +17,12 @@ const ReportDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [decryptedContent, setDecryptedContent] = useState<any | null>(null);
   const [decrypting, setDecrypting] = useState(false);
+  const [isBlockchainAdmin, setIsBlockchainAdmin] = useState(false);
+
+  // Check if user is admin (either via auth context or blockchain)
+  const isUserAdmin = () => {
+    return isAdmin() || isBlockchainAdmin;
+  };
 
   const statusIcons = {
     submitted: Clock,
@@ -48,6 +54,28 @@ const ReportDetailPage = () => {
       fetchReport(id);
     }
   }, [id]);
+
+  // Check blockchain admin status when wallet connects
+  useEffect(() => {
+    const checkBlockchainAdmin = async () => {
+      if (wallet.isConnected && wallet.address) {
+        try {
+          if (!blockchainService.isConnected()) {
+            await blockchainService.initializeFromExistingProvider();
+          }
+          const roles = await blockchainService.getUserRoles(wallet.address);
+          setIsBlockchainAdmin(roles.isAdmin || roles.isVerifier);
+        } catch (error) {
+          console.error('Failed to check blockchain admin status:', error);
+          setIsBlockchainAdmin(false);
+        }
+      } else {
+        setIsBlockchainAdmin(false);
+      }
+    };
+
+    checkBlockchainAdmin();
+  }, [wallet.isConnected, wallet.address]);
 
   const fetchReport = async (reportId: string) => {
     try {
@@ -129,10 +157,6 @@ const ReportDetailPage = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleReportUpdated = (updatedReport: Report) => {
-    setReport(updatedReport);
   };
 
   const handleDecryptContent = async () => {
@@ -489,12 +513,14 @@ const ReportDetailPage = () => {
           </div>
         </div>
         
-        {/* Admin Actions */}
-        {isAdmin() && (
-          <AdminRewardActions 
-            report={report} 
-            onReportUpdated={setReport}
-          />
+        {/* Admin Actions - Only show when content is decrypted and user is admin */}
+        {isUserAdmin() && decryptedContent && (
+          <div className="mt-6">
+            <AdminRewardActions 
+              report={report} 
+              onReportUpdated={setReport}
+            />
+          </div>
         )}
       </div>
     </div>

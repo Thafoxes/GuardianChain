@@ -90,7 +90,222 @@ npm run content-test
 
 ---
 
-## 🔗 **Step 2: Start API Server**
+## 🌐 **TESTNET DEPLOYMENT** 
+
+If you want to deploy to **Sapphire Testnet** instead of local development, follow this section. Skip to **Step 2** if you're doing local development.
+
+### **Prerequisites for Testnet**
+
+1. **MetaMask** with Sapphire Testnet configured
+2. **TEST tokens** from the faucet
+3. **Private keys** for deployment
+
+### **T1: Configure Sapphire Testnet in MetaMask**
+
+1. **Open MetaMask** → **Networks** → **Add Network** → **Add Network Manually**
+
+2. **Enter Network Details:**
+   ```
+   Network name: Sapphire Testnet
+   New RPC URL: https://testnet.sapphire.oasis.dev
+   Chain ID: 23295
+   Currency symbol: TEST
+   Block explorer URL: https://testnet.explorer.sapphire.oasis.dev
+   ```
+
+3. **Click "Save"**
+
+### **T2: Get TEST Tokens from Faucet**
+
+1. **Visit:** https://faucet.testnet.oasis.dev/
+2. **Select "Sapphire"** from the network dropdown
+3. **Enter your wallet address**
+4. **Request tokens** (you'll receive TEST tokens)
+5. **Wait 1-2 minutes** for confirmation
+
+### **T3: Deploy Backend Smart Contracts to Testnet**
+
+```bash
+# Navigate to backend folder
+cd backend
+
+# Install dependencies (first time only)
+npm install
+
+# Copy environment configuration
+cp .env.example .env
+```
+
+**Edit `backend/.env` file:**
+```env
+# Replace with your actual private key (from MetaMask)
+PRIVATE_KEY=0xYOUR_ACTUAL_PRIVATE_KEY_HERE
+
+# Testnet configuration (already set in hardhat.config.js)
+NODE_ENV=production
+```
+
+**⚠️ SECURITY WARNING:** Never share or commit your real private key!
+
+**Deploy to Sapphire Testnet:**
+```bash
+# Deploy contracts to Sapphire Testnet
+npm run testnet-deploy
+```
+
+**✅ Expected Output:**
+```
+🚀 === Deploying GuardianChain to Sapphire Testnet === 🚀
+✅ Connected to Sapphire Testnet
+💰 Account balance: 1.0 TEST
+✅ RewardToken deployed to: 0x742d35Cc6634C0532925a3b8D4c...
+✅ UserVerification deployed to: 0x742d35Cc6634C0532925a3b8D4c...  
+✅ ReportContract deployed to: 0x742d35Cc6634C0532925a3b8D4c...
+✅ All contracts deployed successfully!
+```
+
+**📝 IMPORTANT:** Save these contract addresses for API and Frontend configuration!
+
+### **T4: Configure and Start API Server for Testnet**
+
+```bash
+# Navigate to API folder
+cd ../api
+
+# Install dependencies
+npm install
+
+# Copy environment configuration
+cp .env.example .env
+```
+
+**Edit `api/.env` file:**
+```env
+# Server Configuration
+PORT=3001
+NODE_ENV=production
+FRONTEND_URL=http://localhost:3000
+
+# Network Configuration
+NETWORK=testnet
+
+# Contract Addresses (update with your deployed addresses from T3)
+REWARD_TOKEN_ADDRESS=0xYOUR_REWARD_TOKEN_ADDRESS
+USER_VERIFICATION_ADDRESS=0xYOUR_USER_VERIFICATION_ADDRESS  
+REPORT_CONTRACT_ADDRESS=0xYOUR_REPORT_CONTRACT_ADDRESS
+
+# Backend wallet (use same private key as deployment)
+BACKEND_PRIVATE_KEY=0xYOUR_ACTUAL_PRIVATE_KEY_HERE
+
+# Stake settings
+STAKE_AMOUNT=10
+TREASURY_ADDRESS=0xYOUR_WALLET_ADDRESS
+TREASURY_PRIVATE_KEY=0xYOUR_ACTUAL_PRIVATE_KEY_HERE
+```
+
+**Start API Server:**
+```bash
+npm run dev
+```
+
+**✅ Expected Output:**
+```
+🚀 GuardianChain API Server starting...
+✅ Connected to Sapphire Testnet
+🔗 Loaded contract: RewardToken at 0x742d35Cc...
+🔗 Loaded contract: UserVerification at 0x742d35Cc...
+🔗 Loaded contract: ReportContract at 0x742d35Cc...
+🌐 Server running on http://localhost:3001
+```
+
+### **T5: Configure and Start Frontend for Testnet**
+
+```bash
+# Navigate to Frontend folder  
+cd ../frontend
+
+# Install dependencies
+npm install
+
+# Copy environment configuration
+cp .env.example .env
+```
+
+**Edit `frontend/.env` file:**
+```env
+# API Configuration
+VITE_API_URL=http://localhost:3001/api
+VITE_NETWORK=testnet
+
+# Contract Addresses (update with your deployed addresses from T3)
+VITE_CONTRACT_ADDRESS_USER_VERIFICATION=0xYOUR_USER_VERIFICATION_ADDRESS
+VITE_CONTRACT_ADDRESS_REPORT_CONTRACT=0xYOUR_REPORT_CONTRACT_ADDRESS
+
+# Testnet RPC (optional override)
+VITE_TESTNET_RPC=https://testnet.sapphire.oasis.dev
+```
+
+**Start Frontend:**
+```bash
+npm run dev
+```
+
+**✅ Expected Output:**
+```
+  VITE v5.x.x ready in xxx ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
+```
+
+### **T6: Test Testnet Deployment**
+
+1. **Open application:** `http://localhost:3000`
+2. **Connect MetaMask:** Make sure you're on Sapphire Testnet
+3. **Login:** Connect your wallet with TEST tokens
+4. **Test functionality:** Submit reports, verify users, etc.
+
+### **T7: Get GCR Tokens for Testnet Testing**
+
+**Mint GCR tokens via API:**
+```powershell
+# Replace YOUR_WALLET_ADDRESS with your actual address
+Invoke-RestMethod -Uri "http://localhost:3001/api/stake/mint-tokens" -Method POST -ContentType "application/json" -Body '{"address": "YOUR_WALLET_ADDRESS", "amount": 100}'
+```
+
+### **📋 Testnet Information**
+- **Testnet RPC:** `https://testnet.sapphire.oasis.dev`
+- **Chain ID:** `23295` (0x5aff)
+- **Currency:** `TEST` tokens
+- **Block Explorer:** `https://testnet.explorer.sapphire.oasis.dev`
+- **Faucet:** `https://faucet.testnet.oasis.dev/`
+
+### **🔧 Testnet Troubleshooting**
+
+#### **"Insufficient balance" Error**
+```
+Solution: Get more TEST tokens from faucet
+Faucet: https://faucet.testnet.oasis.dev/
+Wait: 1-2 minutes for tokens to arrive
+```
+
+#### **"Wrong network" Error**  
+```
+Solution: Switch MetaMask to Sapphire Testnet
+Chain ID: 23295
+RPC URL: https://testnet.sapphire.oasis.dev
+```
+
+#### **"Contract not found" Error**
+```
+Solution: Verify contract addresses in .env files
+Check: Both API and Frontend .env files have correct addresses
+Verify: Contracts deployed successfully with testnet-deploy
+```
+
+---
+
+## 🔗 **Step 2: Start API Server (Localnet)**
 
 The API server connects your React frontend to the blockchain smart contracts.
 
@@ -411,12 +626,68 @@ cd backend && npm run localnet-demo (tests contracts)
 
 ---
 
-## 🚀 **Quick Start Script**
+## 🚀 **Quick Deployment Scripts**
 
-Create this script to automate the startup process:
+### **Testnet Quick Deploy (Windows PowerShell):**
+```powershell
+# Save this as deploy-testnet.ps1
+Write-Host "🚀 GuardianChain Testnet Deployment" -ForegroundColor Green
+
+# Step 1: Deploy Backend
+Write-Host "`n1. Deploying Backend Contracts..." -ForegroundColor Yellow
+cd backend
+npm run testnet-deploy
+
+# Wait for user to update .env files
+Write-Host "`n📝 Please update the .env files in api/ and frontend/ with the contract addresses shown above." -ForegroundColor Cyan
+Read-Host "Press Enter when you've updated the .env files..."
+
+# Step 2: Start API
+Write-Host "`n2. Starting API Server..." -ForegroundColor Yellow
+cd ../api
+Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", "npm run dev"
+
+# Step 3: Start Frontend  
+Write-Host "`n3. Starting Frontend..." -ForegroundColor Yellow
+cd ../frontend
+Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", "npm run dev"
+
+Write-Host "`n✅ Testnet deployment complete!" -ForegroundColor Green
+Write-Host "🌐 Frontend: http://localhost:3000" -ForegroundColor Cyan
+Write-Host "🔗 API: http://localhost:3001" -ForegroundColor Cyan
+```
+
+### **Localnet Quick Start (Windows PowerShell):**
+```powershell
+# Save this as start-localnet.ps1  
+Write-Host "🚀 GuardianChain Localnet Startup" -ForegroundColor Green
+
+# Step 1: Start Docker
+Write-Host "`n1. Starting Docker Blockchain..." -ForegroundColor Yellow
+Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", "docker run -it -p8545:8545 -p8546:8546 ghcr.io/oasisprotocol/sapphire-localnet:latest-2025-08-05-gita4d5d8b"
+
+# Wait for Docker to start
+Start-Sleep -Seconds 10
+
+# Step 2: Deploy Contracts
+Write-Host "`n2. Deploying Contracts..." -ForegroundColor Yellow
+cd backend
+npm run localnet-deploy
+
+# Step 3: Start API
+Write-Host "`n3. Starting API Server..." -ForegroundColor Yellow
+cd ../api
+Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", "npm run dev"
+
+# Step 4: Start Frontend
+Write-Host "`n4. Starting Frontend..." -ForegroundColor Yellow
+cd ../frontend  
+Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", "npm run dev"
+
+Write-Host "`n✅ Localnet startup complete!" -ForegroundColor Green
+```
 
 ### **Windows (start.bat):**
-```batch
 @echo off
 echo Starting GuardianChain Complete Stack...
 
@@ -478,6 +749,16 @@ echo "✅ All services started! Check the opened terminals."
 
 ## 📚 **Additional Resources**
 
+### **Environment Configuration Summary**
+
+| Component | Localnet | Testnet |
+|-----------|----------|---------|
+| **Backend** | `PRIVATE_KEY=0xac09...` (Docker default) | `PRIVATE_KEY=0xYOUR_REAL_KEY` |
+| **API** | `NETWORK=localnet` | `NETWORK=testnet` |
+| **Frontend** | `VITE_NETWORK=localnet` | `VITE_NETWORK=testnet` |
+| **Contracts** | Auto-deployed to localhost:8545 | Deployed to testnet.sapphire.oasis.dev |
+| **Tokens** | Pre-funded 10,000 TEST | Get from faucet |
+
 ### **Documentation**
 - **Backend README:** `backend/README.md`
 - **API README:** `api/README.md`  
@@ -502,11 +783,12 @@ npm test                 # Run frontend tests
 ```
 
 ### **Network Information**
-- **Localnet RPC:** `http://localhost:8545`
-- **Localnet WebSocket:** `ws://localhost:8546`
-- **Chain ID:** `23293` (0x5afd)
-- **Currency:** `TEST` tokens
-- **Block Explorer:** Not available for localnet
+
+| Network | RPC URL | Chain ID | Currency | Block Explorer | Faucet |
+|---------|---------|----------|----------|----------------|---------|
+| **Localnet** | `http://localhost:8545` | `23293` (0x5afd) | TEST | Not available | Docker pre-funded |
+| **Testnet** | `https://testnet.sapphire.oasis.dev` | `23295` (0x5aff) | TEST | [testnet.explorer.sapphire.oasis.dev](https://testnet.explorer.sapphire.oasis.dev) | [faucet.testnet.oasis.dev](https://faucet.testnet.oasis.dev/) |
+| **Mainnet** | `https://sapphire.oasis.io` | `23294` (0x5afe) | ROSE | [explorer.sapphire.oasis.dev](https://explorer.sapphire.oasis.dev) | Buy ROSE tokens |
 
 ---
 
@@ -523,7 +805,8 @@ If you've followed all steps, you should now have:
 ### **Next Steps:**
 - **Explore the application** - Submit reports, verify users, claim rewards
 - **Develop new features** - The complete stack is ready for customization
-- **Deploy to testnets** - When ready, deploy to Sapphire testnet/mainnet
+- **Deploy to testnet** - Use the **TESTNET DEPLOYMENT** section above for live testing
+- **Deploy to mainnet** - When ready, deploy to Sapphire mainnet (update RPC URLs and chain IDs)
 
 ---
 
