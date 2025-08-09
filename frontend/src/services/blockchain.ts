@@ -68,8 +68,22 @@ const SAPPHIRE_LOCALNET = {
   blockExplorerUrls: ['http://localhost:8544'],
 };
 
-// Contract address from deployment
+// Contract addresses from environment variables
 const REPORT_CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS_REPORT_CONTRACT;
+const USER_VERIFICATION_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS_USER_VERIFICATION;
+
+// Validate that required environment variables are set
+if (!REPORT_CONTRACT_ADDRESS) {
+  throw new Error('VITE_CONTRACT_ADDRESS_REPORT_CONTRACT is not set in environment variables');
+}
+if (!USER_VERIFICATION_ADDRESS) {
+  throw new Error('VITE_CONTRACT_ADDRESS_USER_VERIFICATION is not set in environment variables');
+}
+
+console.log('🔧 Contract addresses loaded from environment:', {
+  reportContract: REPORT_CONTRACT_ADDRESS,
+  userVerification: USER_VERIFICATION_ADDRESS
+});
 
 export class BlockchainService {
   private provider: ethers.BrowserProvider | null = null;
@@ -161,38 +175,112 @@ export class BlockchainService {
   }
 
   async checkUserVerification(userAddress: string): Promise<boolean> {
-  if (!this.provider) {
-    throw new Error('Provider not initialized');
+    if (!this.provider) {
+      throw new Error('Provider not initialized');
+    }
+
+    try {
+      const userVerificationABI = [
+        {
+          "inputs": [{"internalType": "address", "name": "userAddress", "type": "address"}],
+          "name": "isUserVerified",
+          "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ];
+
+      const userContract = new ethers.Contract(
+        USER_VERIFICATION_ADDRESS,
+        userVerificationABI,
+        this.provider
+      );
+
+      const isVerified = await userContract.isUserVerified(userAddress);
+      console.log('🔍 User verification status:', { userAddress, isVerified, contractAddress: USER_VERIFICATION_ADDRESS });
+      
+      return isVerified;
+    } catch (error: any) {
+      console.error('🔍 Error checking verification:', error);
+      return false;
+    }
   }
 
-  try {
-    // You'll need the UserVerification contract ABI and address
-    const userVerificationAddress = import.meta.env.VITE_CONTRACT_ADDRESS_USER_VERIFICATION; // Update with your deployed address
-    
-    const userVerificationABI = [
-      {
-        "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
-        "name": "isUserVerified",
-        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-        "stateMutability": "view",
-        "type": "function"
+  async getUserRoles(userAddress: string): Promise<{
+    isAdmin: boolean;
+    isVerifier: boolean;
+    isVerified: boolean;
+    role: 'ADMIN' | 'VERIFIER' | 'VERIFIED' | 'USER';
+  }> {
+    if (!this.provider) {
+      throw new Error('Provider not initialized');
+    }
+
+    try {
+      const userVerificationABI = [
+        {
+          "inputs": [{"internalType": "address", "name": "userAddress", "type": "address"}],
+          "name": "isUserVerified",
+          "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [{"internalType": "address", "name": "verifier", "type": "address"}],
+          "name": "isVerifier",
+          "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [],
+          "name": "admin",
+          "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+          "stateMutability": "view",
+          "type": "function"
+        }
+      ];
+
+      const userContract = new ethers.Contract(
+        USER_VERIFICATION_ADDRESS,
+        userVerificationABI,
+        this.provider
+      );
+
+      // Check all roles in parallel
+      const [isVerified, isVerifier, adminAddress] = await Promise.all([
+        userContract.isUserVerified(userAddress).catch(() => false),
+        userContract.isVerifier(userAddress).catch(() => false),
+        userContract.admin().catch(() => '0x0000000000000000000000000000000000000000')
+      ]);
+
+      const isAdmin = adminAddress.toLowerCase() === userAddress.toLowerCase();
+
+      // Determine primary role (highest priority first)
+      let role: 'ADMIN' | 'VERIFIER' | 'VERIFIED' | 'USER' = 'USER';
+      if (isAdmin) {
+        role = 'ADMIN';
+      } else if (isVerifier) {
+        role = 'VERIFIER';
+      } else if (isVerified) {
+        role = 'VERIFIED';
       }
-    ];
 
-    const userContract = new ethers.Contract(
-      userVerificationAddress,
-      userVerificationABI,
-      this.provider
-    );
-
-    const isVerified = await userContract.isUserVerified(userAddress);
-    console.log('🔍 User verification status:', { userAddress, isVerified });
-    
-    return isVerified;
-  } catch (error: any) {
-    console.error('🔍 Error checking verification:', error);
-    return false;
-  }
+      console.log('🔍 User roles:', { 
+        userAddress, 
+        isAdmin, 
+        isVerifier, 
+        isVerified, 
+        role,
+        adminAddress,
+        contractAddress: USER_VERIFICATION_ADDRESS 
+      });
+      
+      return { isAdmin, isVerifier, isVerified, role };
+    } catch (error: any) {
+      console.error('🔍 Error checking user roles:', error);
+      return { isAdmin: false, isVerifier: false, isVerified: false, role: 'USER' };
+    }
   }
 
   async submitReport(encryptedContent: string): Promise<string> {

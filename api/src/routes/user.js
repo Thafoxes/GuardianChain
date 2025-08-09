@@ -339,11 +339,10 @@ router.get('/:address/roles', async (req, res) => {
     const reportContract = blockchainService.getContract('ReportContract');
     const userContract = blockchainService.getContract('UserVerification');
 
-    // Check if user is verified
+    // Check if user is verified using the correct function
     let isVerified = false;
     try {
-      const userInfo = await userContract.users(address);
-      isVerified = userInfo.isVerified || false;
+      isVerified = await userContract.isUserVerified(address);
     } catch (error) {
       logger.warn('Could not check user verification status:', error.message);
       isVerified = false;
