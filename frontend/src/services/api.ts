@@ -329,4 +329,32 @@ export const blockchainApi = {
     api.get(`/blockchain/token-balance/${address}`),
 };
 
+// Faucet API
+export const faucetApi = {
+  claimTokens: (walletAddress: string): Promise<ApiResponse<{
+    amount: string;
+    transactionHash: string;
+    walletAddress: string;
+  }>> =>
+    api.post('/faucet/claim', { walletAddress }),
+
+  getStatus: (address: string): Promise<ApiResponse<{
+    canClaim: boolean;
+    timeLeft: number;
+    amount: string;
+    cooldownHours: number;
+  }>> =>
+    api.get(`/faucet/status/${address}`),
+
+  getInfo: (): Promise<ApiResponse<{
+    faucetAddress: string;
+    balance: string;
+    faucetAmount: string;
+    cooldownHours: number;
+    tokenSymbol: string;
+    tokenName: string;
+  }>> =>
+    api.get('/faucet/info'),
+};
+
 export default api;

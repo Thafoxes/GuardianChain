@@ -36,6 +36,8 @@ import reportRoutes from './routes/report.js';
 import adminRoutes from './routes/admin.js';
 import healthRoutes from './routes/health.js';
 import stakeRoutes from './routes/stake.js';
+import faucetRoutes from './routes/faucet.js';
+import blockchainRoutes from './routes/blockchain.js';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
@@ -110,6 +112,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/stake', stakeRoutes);
+app.use('/api/faucet', faucetRoutes);
+app.use('/api/blockchain', blockchainRoutes);
 
 // Serve static files from the frontend build (for production)
 if (process.env.NODE_ENV === 'production') {

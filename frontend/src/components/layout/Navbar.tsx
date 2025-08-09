@@ -69,6 +69,9 @@ const Navbar: React.FC = () => {
                 <Link to="/reports" className="text-secondary-600 hover:text-secondary-900">
                   Reports
                 </Link>
+                <Link to="/faucet" className="text-secondary-600 hover:text-secondary-900">
+                  Faucet
+                </Link>
                 <Link to="/submit-report" className="btn-primary">
                   Submit Report
                 </Link>
@@ -175,6 +178,13 @@ const Navbar: React.FC = () => {
                   onClick={() => setIsMenuOpen(false)}
                 >
                   Reports
+                </Link>
+                <Link
+                  to="/faucet"
+                  className="block px-3 py-2 text-secondary-600 hover:text-secondary-900"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Faucet
                 </Link>
                 <Link
                   to="/submit-report"

@@ -12,6 +12,7 @@ import ReportDetailPage from './pages/ReportDetailPage';
 import SubmitReportPage from './pages/SubmitReportPage';
 import AdminPage from './pages/AdminPage';
 import ProfilePage from './pages/ProfilePage';
+import FaucetPage from './pages/FaucetPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 
 function App() {
@@ -31,6 +32,9 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                
+                {/* Public Faucet Route */}
+                <Route path="/faucet" element={<FaucetPage />} />
                 
                 {/* Protected Routes */}
                 <Route path="/dashboard" element={
