@@ -112,18 +112,62 @@ router.post('/submit', [
       try {
         const parsedLog = reportContract.interface.parseLog(log);
         if (parsedLog.name === 'ReportSubmitted') {
-          reportId = Number(parsedLog.args.reportId);
-          logger.info(`Report submitted with ID: ${reportId}`);
+          reportId = parsedLog.args.reportId.toString();
           break;
         }
-      } catch {
-        continue;
+      } catch (parseError) {
+        // Not the log we're looking for, continue
       }
     }
 
     if (!reportId) {
-      throw new Error('Failed to get report ID from transaction');
+      throw new Error('Failed to extract report ID from transaction logs');
     }
+
+    // Store mapping of reportId to actual reporter for authorization
+    if (!global.reporterMapping) {
+      global.reporterMapping = new Map();
+    }
+    global.reporterMapping.set(reportId, walletAddress.toLowerCase());
+    logger.info(`Stored reporter mapping: Report ${reportId} -> ${walletAddress.toLowerCase()}`);
+
+    // Store report metadata for display purposes
+    if (!global.reportMetadata) {
+      global.reportMetadata = new Map();
+    }
+    const metadata = {
+      id: reportId,
+      title,
+      category,
+      severity,
+      anonymous,
+      reporter: walletAddress.toLowerCase(),
+      timestamp: new Date().toISOString(),
+      txHash: tx.hash
+    };
+    global.reportMetadata.set(reportId, metadata);
+    logger.info(`Stored report metadata: Report ${reportId} metadata`);
+
+    // Store the actual reporter mapping in memory/database
+    // This maps the report ID to the actual user who submitted it
+    if (!global.reporterMapping) {
+      global.reporterMapping = new Map();
+    }
+    global.reporterMapping.set(reportId, walletAddress.toLowerCase());
+    
+    logger.info(`Report submitted with ID: ${reportId} by actual reporter: ${walletAddress} (blockchain reporter: ${deployer.address})`);
+
+    const reportData = {
+      id: reportId,
+      title,
+      category,
+      severity,
+      reporter: walletAddress, // Store actual reporter, not blockchain signer
+      blockchain_reporter: deployer.address, // Store blockchain signer for reference
+      txHash: receipt.hash
+    };
+
+    logger.info(`Report submitted successfully to blockchain:`, reportData);
 
     // Store additional metadata in memory/database for frontend display
     // (the blockchain stores encrypted content, we need metadata for listing)
@@ -234,15 +278,18 @@ router.get('/', async (req, res) => {
       try {
         const reportInfo = await reportContract.getReportInfo(i);
         
+        // Get stored metadata if available
+        const storedMetadata = global.reportMetadata ? global.reportMetadata.get(i.toString()) : null;
+        
         const report = {
           id: i,
-          title: `Report #${i}`, // Public title placeholder - real title requires decryption
-          category: "security", // Default - metadata can be enhanced later
-          severity: "medium", // Default - metadata can be enhanced later
+          title: storedMetadata ? storedMetadata.title : `Report #${i}`, // Use stored title or placeholder
+          category: storedMetadata ? storedMetadata.category : "security", // Use stored category or default
+          severity: storedMetadata ? storedMetadata.severity : "medium", // Use stored severity or default
           status: getStatusName(reportInfo.status),
           timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(),
           reporter: reportInfo.reporter,
-          anonymous: false, // Default - metadata can be enhanced later
+          anonymous: storedMetadata ? storedMetadata.anonymous : false, // Use stored anonymous flag or default
           rewardClaimed: reportInfo.rewardClaimed,
           verifiedBy: reportInfo.verifiedBy === '0x0000000000000000000000000000000000000000' ? null : reportInfo.verifiedBy,
           verificationTimestamp: reportInfo.verificationTimestamp > 0 ? 
@@ -320,17 +367,20 @@ router.get('/:id', async (req, res) => {
     try {
       const reportInfo = await reportContract.getReportInfo(reportId);
       
+      // Get stored metadata if available
+      const storedMetadata = global.reportMetadata ? global.reportMetadata.get(reportId.toString()) : null;
+      
       const report = {
         id: reportId,
-        title: `Report #${reportId}`, // Public title placeholder - real title requires decryption
+        title: storedMetadata ? storedMetadata.title : `Report #${reportId}`, // Use stored title or placeholder
         content: "Content is encrypted and requires authorization to view", // Placeholder
         evidence: "Evidence is encrypted and requires authorization to view", // Placeholder
-        category: "security", // Default - can be enhanced with metadata
-        severity: "medium", // Default - can be enhanced with metadata
+        category: storedMetadata ? storedMetadata.category : "security", // Use stored category or default
+        severity: storedMetadata ? storedMetadata.severity : "medium", // Use stored severity or default
         status: getStatusName(reportInfo.status),
         timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(),
         reporter: reportInfo.reporter,
-        anonymous: false, // Default - can be enhanced with metadata
+        anonymous: storedMetadata ? storedMetadata.anonymous : false, // Use stored anonymous flag or default
         rewardClaimed: reportInfo.rewardClaimed,
         verifiedBy: reportInfo.verifiedBy === '0x0000000000000000000000000000000000000000' ? null : reportInfo.verifiedBy,
         verificationTimestamp: reportInfo.verificationTimestamp > 0 ? 
@@ -554,7 +604,26 @@ router.post('/:id/content-authorized', [
     }
 
     // SECURITY CHECK: Verify authorization before allowing decryption
-    const isReporter = reportInfo.reporter && reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase();
+    // Check if user is the actual reporter (from our mapping) or blockchain reporter
+    let isReporter = false;
+    
+    // Initialize reporter mapping if it doesn't exist
+    if (!global.reporterMapping) {
+      global.reporterMapping = new Map();
+    }
+    
+    // Check if user is the actual reporter (stored in our mapping)
+    const actualReporter = global.reporterMapping.get(reportId.toString());
+    if (actualReporter && actualReporter.toLowerCase() === walletAddress.toLowerCase()) {
+      isReporter = true;
+      logger.info(`User ${walletAddress} authorized as actual reporter for report ${reportId}`);
+    }
+    
+    // Also check blockchain reporter (for backwards compatibility)
+    if (!isReporter && reportInfo.reporter && reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase()) {
+      isReporter = true;
+      logger.info(`User ${walletAddress} authorized as blockchain reporter for report ${reportId}`);
+    }
     
     // Check if user is an authorized verifier
     let isVerifier = false;
@@ -732,7 +801,26 @@ router.post('/:id/content', [
     }
 
     // SECURITY CHECK: Verify authorization before allowing decryption
-    const isReporter = reportInfo.reporter && reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase();
+    // Check if user is the actual reporter (from our mapping) or blockchain reporter
+    let isReporter = false;
+    
+    // Initialize reporter mapping if it doesn't exist
+    if (!global.reporterMapping) {
+      global.reporterMapping = new Map();
+    }
+    
+    // Check if user is the actual reporter (stored in our mapping)
+    const actualReporter = global.reporterMapping.get(reportId.toString());
+    if (actualReporter && actualReporter.toLowerCase() === walletAddress.toLowerCase()) {
+      isReporter = true;
+      logger.info(`User ${walletAddress} authorized as actual reporter for report ${reportId}`);
+    }
+    
+    // Also check blockchain reporter (for backwards compatibility)
+    if (!isReporter && reportInfo.reporter && reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase()) {
+      isReporter = true;
+      logger.info(`User ${walletAddress} authorized as blockchain reporter for report ${reportId}`);
+    }
     
     // Check if user is an authorized verifier
     let isVerifier = false;
@@ -809,14 +897,15 @@ router.post('/:id/content', [
       try {
         parsedContent = JSON.parse(decryptedContent);
       } catch (parseError) {
-        // If content is not JSON, return as plain text
+        // If content is not JSON, return as plain text with stored metadata if available
+        const storedMetadata = global.reportMetadata ? global.reportMetadata.get(reportId.toString()) : null;
         parsedContent = {
-          title: `Report #${reportId}`,
+          title: storedMetadata ? storedMetadata.title : `Report #${reportId}`,
           content: decryptedContent,
           evidence: "",
-          category: "other",
-          severity: "medium",
-          anonymous: false
+          category: storedMetadata ? storedMetadata.category : "other",
+          severity: storedMetadata ? storedMetadata.severity : "medium",
+          anonymous: storedMetadata ? storedMetadata.anonymous : false
         };
       }
 
@@ -1013,11 +1102,14 @@ router.get('/my-reports', async (req, res) => {
         
         // Check if this report belongs to the current user
         if (reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase()) {
+          // Get stored metadata if available
+          const storedMetadata = global.reportMetadata ? global.reportMetadata.get(i.toString()) : null;
+          
           const report = {
             id: i,
-            title: `My Report #${i}`, // We can enhance this with metadata
-            category: "security", // Default category, can be enhanced
-            severity: "medium", // Default severity, can be enhanced
+            title: storedMetadata ? storedMetadata.title : `My Report #${i}`, // Use stored title or placeholder
+            category: storedMetadata ? storedMetadata.category : "security", // Use stored category or default
+            severity: storedMetadata ? storedMetadata.severity : "medium", // Use stored severity or default
             reporter: reportInfo.reporter,
             timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(),
             status: getStatusName(reportInfo.status),
@@ -1163,6 +1255,30 @@ router.post('/submit-with-tx', [
       });
     }
 
+    // Store mapping of reportId to actual reporter for authorization
+    if (!global.reporterMapping) {
+      global.reporterMapping = new Map();
+    }
+    global.reporterMapping.set(reportId, walletAddress.toLowerCase());
+    logger.info(`Stored reporter mapping: Report ${reportId} -> ${walletAddress.toLowerCase()}`);
+
+    // Store report metadata for display purposes
+    if (!global.reportMetadata) {
+      global.reportMetadata = new Map();
+    }
+    const metadata = {
+      id: reportId,
+      title,
+      category,
+      severity,
+      anonymous,
+      reporter: walletAddress.toLowerCase(),
+      timestamp: new Date().toISOString(),
+      txHash: transactionHash
+    };
+    global.reportMetadata.set(reportId, metadata);
+    logger.info(`Stored report metadata: Report ${reportId} metadata`);
+
     // Create the report record for tracking
     const reportRecord = {
       id: parseInt(reportId),
@@ -1261,8 +1377,26 @@ router.post('/:id/test-authorization', [
     }
 
     // Check authorization levels
-    // Fix: Use 'reporter' instead of 'submitter'
-    const isReporter = reportInfo.reporter && reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase();
+    // Check if user is the actual reporter (from our mapping) or blockchain reporter
+    let isReporter = false;
+    
+    // Initialize reporter mapping if it doesn't exist
+    if (!global.reporterMapping) {
+      global.reporterMapping = new Map();
+    }
+    
+    // Check if user is the actual reporter (stored in our mapping)
+    const actualReporter = global.reporterMapping.get(reportId.toString());
+    if (actualReporter && actualReporter.toLowerCase() === walletAddress.toLowerCase()) {
+      isReporter = true;
+      logger.info(`User ${walletAddress} authorized as actual reporter for report ${reportId}`);
+    }
+    
+    // Also check blockchain reporter (for backwards compatibility)
+    if (!isReporter && reportInfo.reporter && reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase()) {
+      isReporter = true;
+      logger.info(`User ${walletAddress} authorized as blockchain reporter for report ${reportId}`);
+    }
     
     let isVerifier = false;
     try {
