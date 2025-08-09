@@ -327,4 +327,87 @@ router.get('/debug/backend-info', async (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/stake/mint-tokens
+ * @desc Mint test tokens for development/testing
+ * @access Public
+ */
+router.post('/mint-tokens', [
+  body('address').isEthereumAddress().withMessage('Valid wallet address required'),
+  body('amount').isNumeric().withMessage('Valid amount required')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { address, amount } = req.body;
+
+    // Use backend signer to mint tokens
+    const backendPrivateKey = process.env.BACKEND_PRIVATE_KEY || process.env.TESTNET_PRIVATE_KEY;
+    if (!backendPrivateKey) {
+      return res.status(500).json({
+        success: false,
+        message: 'Backend service not configured for token minting'
+      });
+    }
+
+    const backendSigner = blockchainService.createSigner(backendPrivateKey);
+    const rewardToken = blockchainService.getContractWithSigner('RewardToken', backendSigner);
+
+    // Check if backend is owner/has minting rights
+    const owner = await rewardToken.owner();
+    if (backendSigner.address.toLowerCase() !== owner.toLowerCase()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Backend service not authorized to mint tokens',
+        data: {
+          backendAddress: backendSigner.address,
+          tokenOwner: owner
+        }
+      });
+    }
+
+    const mintAmount = ethers.parseEther(amount.toString());
+    
+    logger.info(`🔄 Minting ${amount} GCR tokens to ${address}`);
+    const mintTx = await rewardToken.mint(address, mintAmount);
+    await mintTx.wait();
+    logger.info(`✅ Tokens minted: ${mintTx.hash}`);
+
+    // Get new balance
+    const newBalance = await rewardToken.balanceOf(address);
+
+    res.json({
+      success: true,
+      message: `Successfully minted ${amount} GCR tokens`,
+      data: {
+        address,
+        amountMinted: `${amount} GCR`,
+        newBalance: `${ethers.formatEther(newBalance)} GCR`,
+        txHash: mintTx.hash
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error minting tokens:', error);
+    
+    let message = 'Failed to mint tokens';
+    if (error.message.includes('Ownable: caller is not the owner')) {
+      message = 'Not authorized to mint tokens';
+    }
+
+    res.status(500).json({
+      success: false,
+      message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 export default router;
