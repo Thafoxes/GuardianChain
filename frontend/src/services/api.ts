@@ -124,6 +124,18 @@ export const reportApi = {
   }): Promise<ApiResponse<{ reportId: number; txHash: string }>> =>
     api.post('/reports/submit', data),
 
+  submitReportWithTx: (data: {
+    title: string;
+    content: string;
+    category?: string;
+    evidence?: string;
+    severity?: string;
+    anonymous?: boolean;
+    walletAddress: string;
+    transactionHash: string;
+  }): Promise<ApiResponse<{ reportId: number; txHash: string }>> =>
+    api.post('/reports/submit-with-tx', data),
+
   getReports: (params?: {
     status?: string;
     category?: string;
