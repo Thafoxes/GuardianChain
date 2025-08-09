@@ -159,21 +159,11 @@ const SubmitReportPage = () => {
             });
             
             try {
-              // Call the verification API endpoint
-              const verifyResponse = await fetch(`http://localhost:3001/api/stake/verify-and-reward`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  address: wallet.address
-                })
-              });
+              // Call the verification API endpoint using the proper API service
+              const verifyResponse = await stakingApi.verifyAndReward(wallet.address);
+              console.log('✅ Verify response:', verifyResponse);
               
-              const verifyResult = await verifyResponse.json();
-              console.log('✅ Verify response:', verifyResult);
-              
-              if (verifyResult.success) {
+              if (verifyResponse.success) {
                 toast.success('✅ Verification successful! You can now submit reports.');
                 setVerificationStatus({
                   isRegistered: true,
@@ -181,8 +171,8 @@ const SubmitReportPage = () => {
                   canSubmitReports: true
                 });
               } else {
-                console.error('❌ Verification failed:', verifyResult);
-                toast.error(`Verification failed: ${verifyResult.error || 'Unknown error'}`);
+                console.error('❌ Verification failed:', verifyResponse);
+                toast.error(`Verification failed: ${verifyResponse.error || 'Unknown error'}`);
               }
             } catch (verifyError) {
               console.error('💥 Verification error:', verifyError);

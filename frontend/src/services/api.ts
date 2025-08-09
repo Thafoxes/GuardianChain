@@ -308,6 +308,15 @@ export const stakingApi = {
     stakeAmount: string;
   }>> =>
     api.post('/stake/stake-for-verification', data),
+
+  verifyAndReward: (address: string): Promise<ApiResponse<{
+    success: boolean;
+    message: string;
+    verified: boolean;
+    rewardAmount?: string;
+    txHash?: string;
+  }>> =>
+    api.post('/stake/verify-and-reward', { address }),
 };
 
 // Blockchain API (for network info)
