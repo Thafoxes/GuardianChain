@@ -76,11 +76,11 @@ const ReportDetailPage = () => {
       if (!isCorrectNetwork) {
         // Try to switch to the correct network
         try {
-          await blockchainService.switchToSapphireLocalnet();
+          await blockchainService.switchToSapphireTestnet();
           // Recheck after switching
           const recheckNetwork = await blockchainService.isCorrectNetwork();
           if (!recheckNetwork) {
-            toast.error('Failed to switch to Sapphire Localnet. Please switch manually in MetaMask.');
+            toast.error('Failed to switch to Sapphire Testnet. Please switch manually in MetaMask.');
             return;
           }
         } catch (switchError: any) {

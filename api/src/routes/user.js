@@ -29,7 +29,7 @@ router.post('/register', [
 
     // For simplified verification, we'll use admin credentials to register and verify the user
     // This eliminates the need for users to provide private keys
-    const adminPrivateKey = process.env.ADMIN_PRIVATE_KEY || '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+    const adminPrivateKey = process.env.TESTNET_PRIVATE_KEY;
     
     if (!adminPrivateKey) {
       return res.status(500).json({

@@ -38,8 +38,8 @@ class BlockchainService {
           name: 'Sapphire Localnet'
         },
         testnet: {
-          url: 'https://testnet.sapphire.oasis.dev',
-          chainId: 0x5aff,
+          url: 'https://testnet.sapphire.oasis.io',
+          chainId: 23295,
           name: 'Sapphire Testnet'
         },
         mainnet: {
@@ -56,8 +56,12 @@ class BlockchainService {
         throw new Error(`Unsupported network: ${network}`);
       }
 
+      // Use custom RPC URL if provided, otherwise use default network config
+      const rpcUrl = process.env.BLOCKCHAIN_RPC_URL || config.url;
+      logger.info(`🌐 Using RPC URL: ${rpcUrl} (network: ${network})`);
+
       // Create provider
-      this.provider = new ethers.JsonRpcProvider(config.url);
+      this.provider = new ethers.JsonRpcProvider(rpcUrl);
       
       // Wrap provider for Sapphire
       this.provider = wrap(this.provider);

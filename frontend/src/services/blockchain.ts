@@ -11,6 +11,13 @@ const REPORT_CONTRACT_ABI = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "getTotalReports",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}],
     "name": "getReportContent",
     "outputs": [{"internalType": "string", "name": "", "type": "string"}],
@@ -55,18 +62,19 @@ const REPORT_CONTRACT_ABI = [
   }
 ];
 
-// Sapphire Localnet configuration
-const SAPPHIRE_LOCALNET = {
-  chainId: '0x5AFD', // 23293 in hex
-  chainName: 'Sapphire Localnet',
+// Sapphire Testnet configuration
+const SAPPHIRE_TESTNET = {
+  chainId: '0x5AFF', // 23295 in hex
+  chainName: 'Sapphire Testnet',
   nativeCurrency: {
     name: 'TEST',
     symbol: 'TEST',
     decimals: 18,
   },
-  rpcUrls: ['http://localhost:8544'],
-  blockExplorerUrls: ['http://localhost:8544'],
+  rpcUrls: ['https://testnet.sapphire.oasis.io'],
+  blockExplorerUrls: ['https://testnet.explorer.sapphire.oasis.io'],
 };
+
 
 // Contract addresses from environment variables
 const REPORT_CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS_REPORT_CONTRACT;
@@ -146,16 +154,17 @@ export class BlockchainService {
     }
   }
 
-  async switchToSapphireLocalnet(): Promise<void> {
+  // Update the switch network method
+  async switchToSapphireTestnet(): Promise<void> {
     if (!window.ethereum) {
       throw new Error('MetaMask is not installed');
     }
 
     try {
-      // Try to switch to Sapphire Localnet
+      // Try to switch to Sapphire Testnet
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: SAPPHIRE_LOCALNET.chainId }],
+        params: [{ chainId: SAPPHIRE_TESTNET.chainId }],
       });
     } catch (switchError: any) {
       // If the chain doesn't exist, add it
@@ -163,13 +172,13 @@ export class BlockchainService {
         try {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
-            params: [SAPPHIRE_LOCALNET],
+            params: [SAPPHIRE_TESTNET],
           });
         } catch (addError: any) {
-          throw new Error(`Failed to add Sapphire Localnet: ${addError.message}`);
+          throw new Error(`Failed to add Sapphire Testnet: ${addError.message}`);
         }
       } else {
-        throw new Error(`Failed to switch to Sapphire Localnet: ${switchError.message}`);
+        throw new Error(`Failed to switch to Sapphire Testnet: ${switchError.message}`);
       }
     }
   }
@@ -328,18 +337,18 @@ export class BlockchainService {
     console.log('Network info:', { 
       chainId: chainId.toString(), 
       name: network.name,
-      isSapphireLocalnet: chainId === 23293n 
+      isSapphireTestnet: chainId === 23295n 
     });
 
-    // For Sapphire localnet, use legacy transaction format
+    // For Sapphire testnet, use legacy transaction format
     const txOptions: any = {
-      gasLimit: 200000
+      gasLimit: 500000
     };
     
-    if (chainId === 23293n) { // Sapphire Localnet
-      // Use legacy transaction format for Sapphire localnet
-      txOptions.gasPrice = ethers.parseUnits('1', 'gwei');
-      console.log('Using legacy transaction for Sapphire localnet');
+    if (chainId === 23295n) { // Sapphire Testnet
+      // Use legacy transaction format for Sapphire testnet
+      txOptions.gasPrice = ethers.parseUnits('2', 'gwei');
+      console.log('Using legacy transaction for Sapphire Testnet');
     } else {
       // EIP-1559 for other networks
       txOptions.maxFeePerGas = ethers.parseUnits('20', 'gwei');
@@ -507,10 +516,10 @@ export class BlockchainService {
       const network = await this.provider.getNetwork();
       console.log('🔍 Current network:', { 
         chainId: network.chainId.toString(), 
-        expected: '23293',
-        matches: network.chainId.toString() === '23293'
+        expected: '23295',
+        matches: network.chainId.toString() === '23295'
       });
-      return network.chainId.toString() === '23293'; // Sapphire Localnet
+      return network.chainId.toString() === '23295'; // Sapphire Testnet
     } catch (error) {
       console.error('🔍 Network check error:', error);
       return false;

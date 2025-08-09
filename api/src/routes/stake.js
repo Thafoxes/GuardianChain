@@ -405,36 +405,87 @@ router.post('/stake-for-verification-postman', async (req, res) => {
 // Proper user-pays-to-get-verified endpoint
 router.post('/stake-for-verification', async (req, res) => {
   try {
-    const { walletAddress } = req.body;
+    console.log('=== STAKE FOR VERIFICATION DEBUG ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    const { walletAddress, stakeTransactionHash } = req.body;
+    
+    console.log('Extracted values:');
+    console.log('- walletAddress:', walletAddress);
+    console.log('- stakeTransactionHash:', stakeTransactionHash);
     
     if (!blockchainService.isValidAddress(walletAddress)) {
+      console.log('❌ Invalid wallet address validation failed');
       return res.status(400).json({ error: 'Invalid wallet address' });
     }
+    console.log('✅ Wallet address validation passed');
+    
+    if (!stakeTransactionHash) {
+      console.log('❌ Missing stake transaction hash');
+      return res.status(400).json({ error: 'Stake transaction hash is required' });
+    }
+    console.log('✅ Stake transaction hash validation passed');
     
      const backendPrivateKey = process.env.BACKEND_PRIVATE_KEY;
     if (!backendPrivateKey) {
+      console.log('❌ Backend private key not configured');
       return res.status(500).json({ error: 'Backend private key not configured' });
     }
-
+    console.log('✅ Backend private key found');
 
     const treasuryAddress = process.env.TREASURY_ADDRESS;
     const rewardTokenAddress = process.env.REWARD_TOKEN_ADDRESS;
     
+    console.log('Environment variables:');
+    console.log('- treasuryAddress:', treasuryAddress);
+    console.log('- rewardTokenAddress:', rewardTokenAddress);
+    
     if (!backendPrivateKey || !treasuryAddress || !rewardTokenAddress) {
+      console.log('❌ Backend configuration incomplete');
       return res.status(500).json({ error: 'Backend configuration incomplete' });
     }
+    console.log('✅ All environment variables found');
     
-    // Step 1: Verify the stake transaction
+    // Step 1: Verify the stake transaction with retry logic
+    console.log('🔍 Step 1: Looking up transaction on blockchain...');
     const provider = blockchainService.getProvider();
     
-    try {
-      const stakeTransaction = await provider.getTransaction(stakeTransactionHash);
-      if (!stakeTransaction) {
-        return res.status(400).json({
-          error: 'Stake transaction not found on blockchain'
-        });
+    let stakeTransaction = null;
+    let retryCount = 0;
+    const maxRetries = 5;
+    
+    while (!stakeTransaction && retryCount < maxRetries) {
+      try {
+        console.log(`Getting transaction (attempt ${retryCount + 1}/${maxRetries}):`, stakeTransactionHash);
+        stakeTransaction = await provider.getTransaction(stakeTransactionHash);
+        
+        if (!stakeTransaction && retryCount < maxRetries - 1) {
+          console.log('Transaction not found, waiting 2 seconds before retry...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          retryCount++;
+        }
+      } catch (error) {
+        console.log('Error fetching transaction:', error.message);
+        if (retryCount < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          retryCount++;
+        } else {
+          throw error;
+        }
       }
-      
+    }
+    
+    console.log('Transaction result:', stakeTransaction ? 'Found' : 'Not found');
+    
+    if (!stakeTransaction) {
+      console.log('❌ Stake transaction not found on blockchain after retries');
+      return res.status(400).json({
+        error: 'Stake transaction not found on blockchain. Please wait a moment and try again.'
+      });
+    }
+    console.log('✅ Transaction found on blockchain');
+    
+    try {
       // Verify transaction is to the reward token contract
       if (stakeTransaction.to.toLowerCase() !== rewardTokenAddress.toLowerCase()) {
         return res.status(400).json({

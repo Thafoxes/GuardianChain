@@ -236,7 +236,11 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
 
       toast.success('Stake transaction confirmed! Processing verification...');
 
+      // Add a small delay to ensure transaction is fully propagated
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       // Step 3: Call API to verify the stake and complete verification
+      console.log('Calling API with transaction hash:', stakeTx.hash);
       const response = await stakingApi.stakeForVerification({
         walletAddress: wallet.address,
         stakeTransactionHash: stakeTx.hash

@@ -104,7 +104,7 @@ const RegisterPage: React.FC = () => {
                       Wrong Network
                     </h3>
                     <p className="mt-1 text-sm text-yellow-700">
-                      Please switch to Oasis Sapphire Localnet to continue.
+                      Please switch to Oasis Sapphire Testnet to continue.
                     </p>
                   </div>
                 </div>
@@ -114,7 +114,7 @@ const RegisterPage: React.FC = () => {
                 onClick={handleNetworkSwitch}
                 className="w-full flex justify-center items-center px-4 py-3 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
               >
-                Switch to Sapphire Localnet
+                Switch to Sapphire Testnet
               </button>
             </div>
           ) : (

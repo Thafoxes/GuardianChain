@@ -95,7 +95,7 @@ router.post('/submit', [
 
     // Get a signer using the first localnet private key (deployer account)
     // In production, this would be handled differently with proper authentication
-    const deployerPrivateKey = process.env.LOCALNET_PRIVATE_KEY || '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+    const deployerPrivateKey = process.env.TESTNET_PRIVATE_KEY;
     const deployer = blockchainService.createSigner(deployerPrivateKey);
     
     // Get contract with deployer signer (who will submit on behalf of user)

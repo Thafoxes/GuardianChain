@@ -41,15 +41,15 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       blockExplorerUrls: [],
     },
     testnet: {
-      chainId: 0x5aff,
+      chainId: 0x5aff, // 23295
       chainName: 'Sapphire Testnet',
-      rpcUrls: ['https://testnet.sapphire.oasis.dev'],
+      rpcUrls: ['https://testnet.sapphire.oasis.io'],
       nativeCurrency: {
         name: 'TEST',
         symbol: 'TEST',
         decimals: 18,
       },
-      blockExplorerUrls: ['https://testnet.explorer.sapphire.oasis.dev'],
+      blockExplorerUrls: ['https://explorer.sapphire.testnet.oasis.io'],
     },
     mainnet: {
       chainId: 0x5afe,
@@ -64,7 +64,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     },
   };
 
-  const TARGET_NETWORK = SAPPHIRE_NETWORKS.localnet; // Change for different environments
+  // Determine target network from environment variable
+  const networkName = import.meta.env.VITE_NETWORK || 'testnet';
+  const TARGET_NETWORK = SAPPHIRE_NETWORKS[networkName as keyof typeof SAPPHIRE_NETWORKS] || SAPPHIRE_NETWORKS.testnet;
 
   // Check if MetaMask is installed
   const isMetaMaskInstalled = () => {

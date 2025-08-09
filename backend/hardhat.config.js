@@ -16,27 +16,15 @@ module.exports = {
   networks: {
     // Sapphire Testnet
     "sapphire-testnet": {
-      url: "https://testnet.sapphire.oasis.dev",
-      chainId: 0x5aff,
-      accounts: [
-        process.env.PRIVATE_KEY,
-        process.env.PRIVATE_KEY_REPORTER,
-        process.env.PRIVATE_KEY_VERIFIER,
-        process.env.PRIVATE_KEY_INVESTIGATOR,
-        process.env.PRIVATE_KEY_UNAUTHORIZED
-      ].filter(Boolean), // Remove undefined values
+      url: "https://testnet.sapphire.oasis.io",
+      chainId: 0x5aff, // 23295
+      accounts: process.env.TESTNET_PRIVATE_KEY ? [process.env.TESTNET_PRIVATE_KEY] : [],
     },
     // Sapphire Mainnet
     "sapphire-mainnet": {
       url: "https://sapphire.oasis.io",
       chainId: 0x5afe,
-      accounts: [
-        process.env.PRIVATE_KEY,
-        process.env.PRIVATE_KEY_REPORTER,
-        process.env.PRIVATE_KEY_VERIFIER,
-        process.env.PRIVATE_KEY_INVESTIGATOR,
-        process.env.PRIVATE_KEY_UNAUTHORIZED
-      ].filter(Boolean),
+      accounts: process.env.MAINNET_PRIVATE_KEY ? [process.env.MAINNET_PRIVATE_KEY] : [],
     },
     // Sapphire Localnet (Docker)
     "sapphire-localnet": {

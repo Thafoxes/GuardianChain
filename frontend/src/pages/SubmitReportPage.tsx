@@ -4,6 +4,7 @@ import { AlertTriangle, Send, Shield, Eye, EyeOff, FileText, Tag, User, Clock, U
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { reportApi, stakingApi } from '../services/api';
+import { blockchainService } from '../services/blockchain';
 import StakingModal from '../components/StakingModal';
 import toast from 'react-hot-toast';
 
@@ -165,20 +166,26 @@ const SubmitReportPage = () => {
     setIsSubmitting(true);
 
     try {
-      // Submit report to API
-      const reportData = {
+      // Initialize blockchain service from existing MetaMask provider
+      await blockchainService.initializeFromExistingProvider();
+
+      // Prepare encrypted content
+      const reportContent = JSON.stringify({
         title: formData.title.trim(),
-        category: formData.category,
         content: formData.content.trim(),
         evidence: formData.evidence.trim(),
+        category: formData.category,
         severity: formData.severity,
         anonymous: formData.anonymous,
-        walletAddress: wallet.address
-      };
+        timestamp: new Date().toISOString()
+      });
 
-      await reportApi.submitReport(reportData);
+      console.log('📝 Submitting report via MetaMask...');
+      
+      // Submit directly to blockchain via MetaMask (user signs the transaction)
+      const txHash = await blockchainService.submitReport(reportContent);
 
-      toast.success('Report submitted successfully!');
+      toast.success(`Report submitted successfully! Transaction: ${txHash.slice(0, 10)}...`);
       navigate('/reports');
 
     } catch (error: any) {
