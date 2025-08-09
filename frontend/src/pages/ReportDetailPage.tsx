@@ -115,9 +115,9 @@ const ReportDetailPage = () => {
         contentHash: reportInfo.contentHash,
         rewardClaimed: reportInfo.rewardClaimed,
         title: `Report #${Number(reportInfo.id)}`,
-        category: 'general', // Default category - could be extracted from decrypted content
+        category: 'Unknown', // Will be updated when content is decrypted
         content: 'Content is encrypted. Click "Decrypt with MetaMask" to view.',
-        anonymous: false // Default - could be determined from content
+        anonymous: false // Will be updated when content is decrypted
       };
       
       console.log('📄 Formatted report:', blockchainReport);
@@ -173,23 +173,69 @@ const ReportDetailPage = () => {
         return;
       }
 
-      // Use API to get decrypted content (with proper authorization)
+      // Use blockchain service directly instead of API for better reliability
       try {
-        const response = await reportApi.getReportContent(id!, wallet.address);
-        if (response.success && response.data) {
-          setDecryptedContent(response.data);
-          toast.success('Report content decrypted successfully');
+        console.log('🔓 Decrypting content directly from blockchain...');
+        const decryptedData = await blockchainService.getReportContent(Number(id!));
+        
+        if (decryptedData) {
+          setDecryptedContent(decryptedData);
+          
+          // Update report object with decrypted metadata
+          if (report) {
+            const categoryMap: { [key: string]: string } = {
+              'security': 'Security',
+              'fraud': 'Fraud',
+              'corruption': 'Corruption',
+              'safety': 'Safety',
+              'environmental': 'Environmental',
+              'financial': 'Financial',
+              'general': 'General',
+              'other': 'Other'
+            };
+            
+            const severityMap: { [key: string]: 'low' | 'medium' | 'high' | 'critical' } = {
+              'low': 'low',
+              'medium': 'medium',
+              'high': 'high',
+              'critical': 'critical'
+            };
+            
+            const updatedReport = {
+              ...report,
+              title: decryptedData.title || report.title,
+              category: categoryMap[decryptedData.category?.toLowerCase() || 'general'] || 'General',
+              anonymous: decryptedData.anonymous || false,
+              severity: severityMap[decryptedData.severity?.toLowerCase() || 'medium'] || 'medium'
+            };
+            setReport(updatedReport);
+          }
+          
+          toast.success('Content decrypted successfully');
         } else {
-          throw new Error(response.message || 'Unauthorized to view this report');
+          throw new Error('No content returned from blockchain');
         }
-      } catch (apiError: any) {
-        // If API fails due to authorization, show appropriate message
-        if (apiError.message?.includes('authorized') || apiError.response?.status === 403) {
-          toast.error('You are not authorized to view this report content. Only the reporter or authorized verifiers can access it.');
-        } else {
-          toast.error(apiError.message || 'Failed to decrypt report content');
+      } catch (blockchainError: any) {
+        console.log('⚠️ Blockchain decryption failed, trying API fallback...');
+        
+        // Fallback to API if blockchain fails
+        try {
+          const response = await reportApi.getReportContent(id!, wallet.address);
+          if (response.success && response.data) {
+            setDecryptedContent(response.data);
+            toast.success('Report content decrypted successfully');
+          } else {
+            throw new Error(response.message || 'Unauthorized to view this report');
+          }
+        } catch (apiError: any) {
+          // If API also fails, show appropriate message
+          if (apiError.message?.includes('authorized') || apiError.response?.status === 403) {
+            toast.error('You are not authorized to view this report content. Only the reporter or authorized verifiers can access it.');
+          } else {
+            toast.error(apiError.message || 'Failed to decrypt report content');
+          }
+          throw apiError;
         }
-        throw apiError;
       }
 
     } catch (error: any) {
