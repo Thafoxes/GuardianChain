@@ -249,25 +249,26 @@ const SubmitReportPage = () => {
         return;
       }
 
-      // Prepare report content as JSON string (this will be encrypted by the contract)
-      const reportContent = JSON.stringify({
+      // Prepare report data object for blockchain submission
+      const reportData = {
         title: formData.title.trim(),
         content: formData.content.trim(),
         evidence: formData.evidence.trim() || '',
         category: formData.category,
         severity: formData.severity,
         anonymous: formData.anonymous,
-        timestamp: new Date().toISOString(),
         submittedBy: wallet.address
-      });
+      };
 
+      console.log('📝 Form data before submission:', formData);
+      console.log('📝 Report data prepared:', reportData);
       console.log('📝 Submitting content to blockchain:', { 
-        contentLength: reportContent.length,
+        contentLength: JSON.stringify(reportData).length,
         anonymous: formData.anonymous 
       });
 
       // Submit directly to blockchain via MetaMask
-      const txHash = await blockchainService.submitReport(reportContent);
+      const txHash = await blockchainService.submitReport(reportData);
       
       console.log('✅ Report submitted to blockchain:', txHash);
       toast.success(`Report submitted successfully! Transaction: ${txHash.slice(0, 10)}...`);

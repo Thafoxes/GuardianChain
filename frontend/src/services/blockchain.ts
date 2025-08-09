@@ -4,7 +4,7 @@ import { wrap } from '@oasisprotocol/sapphire-paratime';
 // Contract ABI for ReportContract (only the functions we need)
 const REPORT_CONTRACT_ABI = [
   {
-    "inputs": [{"internalType": "string", "name": "encryptedContent", "type": "string"}],
+    "inputs": [{"internalType": "string", "name": "content", "type": "string"}],
     "name": "submitReport",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -292,10 +292,30 @@ export class BlockchainService {
     }
   }
 
-  async submitReport(encryptedContent: string): Promise<string> {
-  if (!this.signer || !this.provider) { // Fix: was missing 'provider'
-    throw new Error('Wallet not connected. Please connect your wallet first.');
-  }
+  /**
+   * Submit a new report to the blockchain
+   */
+  async submitReport(reportData: {
+    title: string;
+    content: string;
+    evidence: string;
+    category: string;
+    severity: string;
+    anonymous: boolean;
+    submittedBy: string;
+  }): Promise<string> {
+    if (!this.signer || !this.provider) {
+      throw new Error('Wallet not connected. Please connect your wallet first.');
+    }
+
+    // Prepare the content as JSON string (contract will handle encryption)
+    const reportContent = JSON.stringify(reportData);
+    
+    console.log('📝 Preparing report content for blockchain submission:', {
+      contentLength: reportContent.length,
+      title: reportData.title,
+      category: reportData.category
+    });
 
   try {
     console.log('📝 Submitting report to blockchain...');
@@ -340,37 +360,50 @@ export class BlockchainService {
       isSapphireTestnet: chainId === 23295n 
     });
 
-    // For Sapphire testnet, use legacy transaction format
-    const txOptions: any = {
-      gasLimit: 500000
-    };
+    // Submit report with minimal transaction options for better compatibility
+    console.log('📝 Calling contract.submitReport with content:', reportContent.substring(0, 100) + '...');
     
-    if (chainId === 23295n) { // Sapphire Testnet
-      // Use legacy transaction format for Sapphire testnet
-      txOptions.gasPrice = ethers.parseUnits('2', 'gwei');
-      console.log('Using legacy transaction for Sapphire Testnet');
-    } else {
-      // EIP-1559 for other networks
-      txOptions.maxFeePerGas = ethers.parseUnits('20', 'gwei');
-      txOptions.maxPriorityFeePerGas = ethers.parseUnits('2', 'gwei');
-      console.log('Using EIP-1559 transaction');
-    }
-
-    console.log('Transaction options:', txOptions);
-
-    // Submit report with appropriate transaction options
-    const tx = await contract.submitReport(encryptedContent, txOptions);
-
-    console.log('📝 Report submitted, transaction hash:', tx.hash);
-    
-    // Wait for confirmation
-    const receipt = await tx.wait();
-    
-    if (receipt.status === 1) {
-      console.log('✅ Report submission confirmed');
-      return tx.hash;
-    } else {
-      throw new Error('Transaction failed');
+    try {
+      // First try without custom gas settings to let MetaMask estimate
+      const tx = await contract.submitReport(reportContent);
+      console.log('📝 Report submitted, transaction hash:', tx.hash);
+      
+      // Wait for confirmation
+      const receipt = await tx.wait();
+      
+      if (receipt.status === 1) {
+        console.log('✅ Report submission confirmed');
+        return tx.hash;
+      } else {
+        throw new Error('Transaction failed');
+      }
+    } catch (gasError: any) {
+      console.log('⚠️ Auto gas estimation failed, trying manual gas settings:', gasError.message);
+      
+      // Fallback: try with manual gas settings
+      const txOptions: any = {
+        gasLimit: 300000, // Reduced gas limit
+      };
+      
+      if (chainId === 23295n) { // Sapphire Testnet
+        txOptions.gasPrice = ethers.parseUnits('1', 'gwei'); // Lower gas price
+        console.log('Using manual gas settings for Sapphire Testnet');
+      }
+      
+      console.log('Fallback transaction options:', txOptions);
+      const tx = await contract.submitReport(reportContent, txOptions);
+      
+      console.log('📝 Report submitted (fallback), transaction hash:', tx.hash);
+      
+      // Wait for confirmation  
+      const receipt = await tx.wait();
+      
+      if (receipt.status === 1) {
+        console.log('✅ Report submission confirmed (fallback)');
+        return tx.hash;
+      } else {
+        throw new Error('Transaction failed (fallback)');
+      }
     }
 
   } catch (error: any) {
