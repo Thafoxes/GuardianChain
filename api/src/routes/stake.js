@@ -328,6 +328,99 @@ router.get('/debug/backend-info', async (req, res) => {
 });
 
 /**
+ * @route POST /api/stake/verify-and-reward
+ * @desc Verify a registered user and distribute rewards
+ * @access Public
+ */
+router.post('/verify-and-reward', [
+  body('address').isEthereumAddress().withMessage('Valid wallet address required')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { address } = req.body;
+
+    // Check if user is registered first
+    const userVerification = blockchainService.getContract('UserVerification');
+    const isRegistered = await userVerification.isRegistered(address);
+    
+    if (!isRegistered) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is not registered. Please register first.',
+        data: { address, isRegistered: false }
+      });
+    }
+
+    // Check if user is already verified
+    const isAlreadyVerified = await userVerification.isUserVerified(address);
+    if (isAlreadyVerified) {
+      return res.json({
+        success: true,
+        message: 'User is already verified',
+        data: { address, isVerified: true, note: 'No action needed' }
+      });
+    }
+
+    // Use backend service to verify user
+    const backendPrivateKey = process.env.BACKEND_PRIVATE_KEY || process.env.TESTNET_PRIVATE_KEY;
+    if (!backendPrivateKey) {
+      return res.status(500).json({
+        success: false,
+        message: 'Backend service not configured for verification'
+      });
+    }
+
+    const backendSigner = blockchainService.createSigner(backendPrivateKey);
+    const userVerificationAsBackend = blockchainService.getContractWithSigner('UserVerification', backendSigner);
+
+    logger.info(`🔄 Verifying user: ${address} using backend: ${backendSigner.address}`);
+    
+    const verifyTx = await userVerificationAsBackend.verifyUser(address);
+    await verifyTx.wait();
+    logger.info(`✅ User verified: ${verifyTx.hash}`);
+
+    // Verify the user is now verified
+    const isVerified = await userVerification.isUserVerified(address);
+
+    res.json({
+      success: true,
+      message: 'User verified successfully',
+      data: {
+        address,
+        isVerified,
+        txHash: verifyTx.hash
+      }
+    });
+
+    logger.info(`🎉 User verification completed for: ${address}`);
+
+  } catch (error) {
+    logger.error('Error in verify-and-reward:', error);
+    
+    let message = 'Failed to verify user';
+    if (error.message.includes('Only admin')) {
+      message = 'Backend service not authorized for verification';
+    } else if (error.message.includes('User already verified')) {
+      message = 'User is already verified';
+    }
+
+    res.status(500).json({
+      success: false,
+      message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
  * @route POST /api/stake/mint-tokens
  * @desc Mint test tokens for development/testing
  * @access Public

@@ -118,7 +118,7 @@ const SubmitReportPage = () => {
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                  walletAddress: wallet.address
+                  address: wallet.address
                 })
               });
               
