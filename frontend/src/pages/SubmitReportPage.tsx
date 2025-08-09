@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Send, Shield, Eye, EyeOff, FileText, Tag, User, Clock, UserCheck } from 'lucide-react';
 import { useWallet } from '../contexts/WalletContext';
-import { stakingApi } from '../services/api';
+import { stakingApi, reportApi } from '../services/api';
 import { blockchainService } from '../services/blockchain';
 import StakingModal from '../components/StakingModal';
 import toast from 'react-hot-toast';
@@ -306,7 +306,27 @@ const SubmitReportPage = () => {
       const txHash = await blockchainService.submitReport(reportData);
       
       console.log('✅ Report submitted to blockchain:', txHash);
-      toast.success(`Report submitted successfully! Transaction: ${txHash.slice(0, 10)}...`);
+      
+      // Record the transaction in the API database
+      console.log('📝 Recording transaction in API...');
+      try {
+        const apiResponse = await reportApi.submitReportWithTx({
+          title: formData.title,
+          content: formData.content,
+          category: formData.category,
+          severity: formData.severity,
+          evidence: formData.evidence,
+          anonymous: formData.anonymous,
+          walletAddress: wallet.address!,
+          transactionHash: txHash
+        });
+        
+        console.log('✅ Transaction recorded in API:', apiResponse);
+        toast.success(`Report submitted successfully! Transaction: ${txHash.slice(0, 10)}...`);
+      } catch (apiError: any) {
+        console.warn('⚠️ Report submitted to blockchain but failed to record in API:', apiError);
+        toast.success(`Report submitted to blockchain! Transaction: ${txHash.slice(0, 10)}... (Note: May take time to appear in reports list)`);
+      }
       
       // Navigate to reports page
       navigate('/reports');

@@ -1,0 +1,34 @@
+{
+  "name": "guardianchain-fullstack",
+  "version": "1.0.0",
+  "description": "GuardianChain - Full Stack Decentralized Reporting Platform",
+  "scripts": {
+    "install-all": "npm install && cd api && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm run build && mkdir -p api/public && cp -r frontend/dist/* api/public/",
+    "start": "cd api && NODE_ENV=production npm start",
+    "dev": "concurrently \"cd api && npm run dev\" \"cd frontend && npm run dev\"",
+    "render-build": "./render-build.sh",
+    "render-start": "cd api && NODE_ENV=production npm start",
+    "docker-build": "docker build -t guardianchain .",
+    "docker-run": "docker run -p 3001:3001 --env-file .env.production guardianchain"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "oasis",
+    "sapphire",
+    "privacy",
+    "reporting",
+    "web3",
+    "decentralized"
+  ],
+  "author": "GuardianChain Team",
+  "license": "MIT"
+}

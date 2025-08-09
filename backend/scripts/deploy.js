@@ -70,6 +70,7 @@ async function main() {
   console.log(`RewardToken: ${rewardTokenAddress}`);
   console.log(`UserVerification: ${userVerificationAddress}`);
   console.log(`ReportContract: ${reportContractAddress}`);
+  console.log(`reward token is connected to the admin key...`)
   console.log("\n=== NEXT STEPS ===");
   console.log("1. Users can register in UserVerification contract");
   console.log("2. Admin can verify users");

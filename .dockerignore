@@ -1,0 +1,76 @@
+# Docker ignore file for GuardianChain
+
+# Node modules
+node_modules/
+api/node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build artifacts
+frontend/dist/
+frontend/build/
+api/public/
+
+# Development files
+.git/
+.gitignore
+README.md
+*.md
+.vscode/
+.idea/
+
+# Environment files (will be set via Render environment variables)
+.env
+.env.local
+.env.development
+.env.test
+api/.env
+frontend/.env
+backend/.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Backend blockchain development files
+backend/artifacts/
+backend/cache/
+backend/deployments/
+backend/scripts/
+backend/test/
+backend/testnet-scripts/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
