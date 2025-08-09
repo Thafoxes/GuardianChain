@@ -193,7 +193,7 @@ contract ReportContract {
     {
         Report memory report = reports[reportId];
         require(
-            authorizedVerifiers[msg.sender] || report.reporter == msg.sender,
+            msg.sender == admin || report.reporter == msg.sender,
             "Not authorized to view report content"
         );
         
