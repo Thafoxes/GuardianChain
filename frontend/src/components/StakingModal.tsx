@@ -218,12 +218,67 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
 
       const tokenContract = new ethers.Contract(tokenAddress, tokenABI, signer);
 
-      // Check user's token balance
-      const balance = await tokenContract.balanceOf(wallet.address);
+      // Check user's token balance with retry logic
+      let balance;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          console.log(`📊 Checking token balance (attempt ${retryCount + 1}/${maxRetries})...`);
+          balance = await tokenContract.balanceOf(wallet.address);
+          console.log('✅ Token balance retrieved:', ethers.formatEther(balance), 'GCR');
+          break; // Success, exit retry loop
+        } catch (balanceError: any) {
+          console.warn(`⚠️ Balance check failed (attempt ${retryCount + 1}):`, balanceError.message);
+          retryCount++;
+          
+          if (retryCount >= maxRetries) {
+            // On final retry failure, check if user is newly registered and needs initial tokens
+            console.log('🔍 Checking if user needs initial token allocation...');
+            
+            try {
+              // Call API to allocate initial tokens for new users
+              const tokenResponse = await fetch(`http://localhost:3001/api/stake/allocate-tokens`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  walletAddress: wallet.address
+                }),
+              });
+              
+              const tokenResult = await tokenResponse.json();
+              console.log('🪙 Token allocation response:', tokenResult);
+              
+              if (tokenResult.success) {
+                toast('🪙 Initial tokens allocated. Please try again in a moment.', {
+                  duration: 4000
+                });
+                // Wait a bit for token allocation to be processed
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                // Try balance check one more time
+                balance = await tokenContract.balanceOf(wallet.address);
+                console.log('✅ Token balance after allocation:', ethers.formatEther(balance), 'GCR');
+                break;
+              }
+            } catch (tokenError) {
+              console.error('❌ Token allocation failed:', tokenError);
+            }
+            
+            throw new Error('Unable to retrieve token balance. Please ensure you have been allocated GCR tokens or contact support.');
+          }
+          
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        }
+      }
+      
       const stakeAmount = ethers.parseEther('10'); // 10 GCR tokens
 
       if (balance < stakeAmount) {
-        throw new Error(`Insufficient GCR tokens. Need 10 GCR, have ${ethers.formatEther(balance)} GCR`);
+        throw new Error(`Insufficient GCR tokens. Need 10 GCR, have ${ethers.formatEther(balance)} GCR. Please contact support for token allocation.`);
       }
 
       // Send 10 GCR tokens to treasury

@@ -503,4 +503,87 @@ router.post('/mint-tokens', [
   }
 });
 
+/**
+ * @route POST /api/stake/allocate-tokens
+ * @desc Allocate initial tokens to new users (20 GCR for staking and testing)
+ * @access Public
+ */
+router.post('/allocate-tokens', [
+  body('walletAddress').isEthereumAddress().withMessage('Valid wallet address required')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { walletAddress } = req.body;
+
+    // Get the admin signer (who can mint tokens)
+    const adminSigner = blockchainService.getSigner();
+    const rewardToken = blockchainService.getContractWithSigner('RewardToken', adminSigner);
+    
+    // Check current balance
+    const currentBalance = await rewardToken.balanceOf(walletAddress);
+    logger.info(`Current balance for ${walletAddress}: ${ethers.formatEther(currentBalance)} GCR`);
+    
+    // If user already has sufficient tokens (>= 15 GCR), don't allocate more
+    const minimumBalance = ethers.parseEther('15');
+    if (currentBalance >= minimumBalance) {
+      return res.json({
+        success: true,
+        message: 'User already has sufficient tokens',
+        data: {
+          walletAddress,
+          currentBalance: `${ethers.formatEther(currentBalance)} GCR`,
+          note: 'No additional tokens allocated'
+        }
+      });
+    }
+    
+    // Allocate 20 GCR tokens (enough for staking 10 and having some extra)
+    const allocationAmount = ethers.parseEther('20');
+    
+    logger.info(`Allocating ${ethers.formatEther(allocationAmount)} GCR to ${walletAddress}`);
+    
+    const mintTx = await rewardToken.mint(walletAddress, allocationAmount);
+    await mintTx.wait();
+    
+    const newBalance = await rewardToken.balanceOf(walletAddress);
+    
+    logger.info(`Successfully allocated tokens. New balance: ${ethers.formatEther(newBalance)} GCR`);
+    
+    res.json({
+      success: true,
+      message: `Successfully allocated ${ethers.formatEther(allocationAmount)} GCR tokens`,
+      data: {
+        walletAddress,
+        allocated: `${ethers.formatEther(allocationAmount)} GCR`,
+        newBalance: `${ethers.formatEther(newBalance)} GCR`,
+        txHash: mintTx.hash
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error allocating tokens:', error);
+    
+    let message = 'Failed to allocate tokens';
+    if (error.message.includes('Ownable: caller is not the owner')) {
+      message = 'Not authorized to allocate tokens';
+    } else if (error.message.includes('insufficient funds')) {
+      message = 'Insufficient gas fees for token allocation';
+    }
+
+    res.status(500).json({
+      success: false,
+      message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 export default router;

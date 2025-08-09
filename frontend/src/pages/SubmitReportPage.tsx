@@ -101,15 +101,50 @@ const SubmitReportPage = () => {
   const handleVerificationComplete = async () => {
     console.log('🔄 handleVerificationComplete called for wallet:', wallet.address);
     
-    // Refresh verification status after registration
+    // Refresh verification status after registration with retry logic
     if (wallet.address) {
       try {
         // Show loading state
         setIsCheckingVerification(true);
         console.log('📊 Checking verification status...');
         
-        const response = await stakingApi.getStatus(wallet.address);
-        console.log('📋 Status response:', response);
+        // Add delay to allow blockchain state to update
+        toast('⏳ Waiting for blockchain confirmation...', {
+          icon: '⏳',
+          duration: 3000
+        });
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        let retryCount = 0;
+        const maxRetries = 3;
+        let response;
+        
+        // Retry verification status check
+        while (retryCount < maxRetries) {
+          try {
+            console.log(`📊 Checking verification status (attempt ${retryCount + 1}/${maxRetries})...`);
+            response = await stakingApi.getStatus(wallet.address);
+            console.log('📋 Status response:', response);
+            
+            if (response.success && response.data) {
+              break; // Success, exit retry loop
+            }
+            
+            throw new Error('Invalid response from verification API');
+          } catch (statusError) {
+            console.warn(`⚠️ Verification status check failed (attempt ${retryCount + 1}):`, statusError);
+            retryCount++;
+            
+            if (retryCount < maxRetries) {
+              // Wait before retry, with increasing delay
+              await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+            }
+          }
+        }
+        
+        if (!response || !response.success) {
+          throw new Error('Unable to verify registration status after multiple attempts');
+        }
         
         if (response.success && response.data) {
           const { isRegistered, isVerified } = response.data;
