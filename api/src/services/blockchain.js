@@ -4,7 +4,6 @@ import { logger } from '../utils/logger.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { add } from 'winston';
 
 // Get current directory for ES modules
 const __filename = fileURLToPath(import.meta.url);

@@ -292,6 +292,58 @@ You should have **4 terminals running:**
 
 ---
 
+## 🪙 **Step 6: Get GCR Tokens for Testing**
+
+To use the stake-based verification system, your wallet needs **GCR tokens**. Here's how to get them:
+
+### **6.1 Mint GCR Tokens via API**
+
+Use the built-in mint endpoint to get 100 GCR tokens:
+
+**PowerShell:**
+```powershell
+Invoke-RestMethod -Uri "http://localhost:3001/api/stake/mint-tokens" -Method POST -ContentType "application/json" -Body '{"address": "YOUR_WALLET_ADDRESS", "amount": 100}'
+```
+
+**Bash/Linux:**
+```bash
+curl -X POST http://localhost:3001/api/stake/mint-tokens \
+  -H "Content-Type: application/json" \
+  -d '{"address": "YOUR_WALLET_ADDRESS", "amount": 100}'
+```
+
+**Replace `YOUR_WALLET_ADDRESS`** with your MetaMask address (starts with 0x...)
+
+### **6.2 Verify Token Balance**
+
+After minting, you should see:
+```json
+{
+  "success": true,
+  "message": "Successfully minted 100 GCR tokens",
+  "data": {
+    "transactionHash": "0x...",
+    "amountMinted": 100,
+    "newBalance": "100.0",
+    "address": "0x..."
+  }
+}
+```
+
+### **6.3 Test Stake-Based Verification**
+
+Now you can test the verification flow:
+
+1. **Go to Submit Report page:** `http://localhost:3000/submit-report`
+2. **Click "Stake & Get Verified"**
+3. **Fill the form:** Enter identifier and longevity
+4. **Approve MetaMask transaction:** Send 10 GCR to treasury
+5. **Get verified automatically:** Account becomes verified instantly
+
+**✅ Expected result:** Your account is verified and you can submit reports!
+
+---
+
 ## 🔧 **Troubleshooting**
 
 ### **Common Issues & Solutions**

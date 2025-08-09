@@ -80,7 +80,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Register new user
+  // Register new user (deprecated - use staking modal instead)
   const register = async (): Promise<void> => {
     if (!wallet.isConnected || !wallet.address) {
       throw new Error('Wallet not connected');
@@ -89,10 +89,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setAuth(prev => ({ ...prev, loading: true }));
 
+      // For backwards compatibility, but users should use staking modal
       const registerResponse = await authApi.register({
         address: wallet.address,
         metadata: {
-          identifier: 'auto_user',
+          identifier: 'legacy_user',
           longevity: 1,
         },
       });
@@ -104,7 +105,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           loading: false,
         });
 
-        toast.success('Registration successful!');
+        toast.success('Registration successful! Consider staking to get verified.');
       } else {
         throw new Error(registerResponse.message || 'Registration failed');
       }

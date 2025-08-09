@@ -199,6 +199,46 @@ export const healthApi = {
     api.get('/health'),
 };
 
+// Staking API
+export const stakingApi = {
+  registerAndStake: (data: {
+    identifier: string;
+    longevity: number;
+    walletAddress: string;
+    stakeTransactionHash: string;
+  }): Promise<ApiResponse<{
+    user: User;
+    txHash: string;
+    stakeAmount: string;
+    verified: boolean;
+  }>> =>
+    api.post('/stake/register-and-stake', data),
+
+  getBalance: (address: string): Promise<ApiResponse<{
+    balance: string;
+    formatted: string;
+  }>> =>
+    api.get(`/stake/balance/${address}`),
+
+  getStatus: (address: string): Promise<ApiResponse<{
+    isRegistered: boolean;
+    isVerified: boolean;
+    hasStaked: boolean;
+    stakeAmount?: string;
+    registrationTx?: string;
+    stakeTx?: string;
+  }>> =>
+    api.get(`/stake/status/${address}`),
+
+  getUserInfo: (address: string): Promise<ApiResponse<{
+    isRegistered: boolean;
+    identifier: string;
+    longevity: number;
+    registrationTime: string;
+  }>> =>
+    api.get(`/stake/user/${address}`),
+};
+
 // Blockchain API (for network info)
 export const blockchainApi = {
   getNetworkInfo: (): Promise<ApiResponse<NetworkInfo>> =>

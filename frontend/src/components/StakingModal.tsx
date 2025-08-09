@@ -3,6 +3,8 @@ import { X, Coins, Shield, CheckCircle, AlertCircle, Loader } from 'lucide-react
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { stakingApi } from '../services/api';
+import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 
 interface StakingModalProps {
@@ -15,12 +17,10 @@ interface UserStatus {
   address: string;
   isRegistered: boolean;
   isVerified: boolean;
-  balance: string;
-  canStake: boolean;
-  userStatus: {
-    createdAt: string;
-    longevity: string;
-  } | null;
+  hasStaked: boolean;
+  stakeAmount?: string;
+  registrationTx?: string;
+  stakeTx?: string;
 }
 
 const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess }) => {
@@ -35,14 +35,11 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
   // Form data
   const [identifier, setIdentifier] = useState('');
   const [longevity, setLongevity] = useState(30);
-  const [treasuryAddress, setTreasuryAddress] = useState('');
 
   // Check user status when modal opens
   useEffect(() => {
     if (isOpen && wallet.address) {
       checkUserStatus();
-      // Set default treasury address (signer[1] from your plan)
-      setTreasuryAddress(process.env.REACT_APP_TREASURY_ADDRESS || '0x70997970C51812dc3A010C7d01b50e0d17dc79C8');
     }
   }, [isOpen, wallet.address]);
 
@@ -53,26 +50,29 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
     setError(null);
 
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stake/status/${wallet.address}`);
-      const data = await response.json();
+      const statusResponse = await stakingApi.getStatus(wallet.address);
 
-      if (data.success) {
-        setUserStatus(data.data);
+      if (statusResponse.success && statusResponse.data) {
+        const status = {
+          address: wallet.address,
+          ...statusResponse.data
+        };
+        setUserStatus(status);
         
-        if (data.data.isRegistered && data.data.isVerified) {
+        if (status.isRegistered && status.isVerified) {
           setStep('success');
-        } else if (data.data.isRegistered && !data.data.isVerified) {
+        } else if (status.isRegistered && !status.isVerified) {
           setError('User is registered but not verified. Please contact support.');
           setStep('error');
         } else {
           setStep('form');
         }
       } else {
-        setError(data.message || 'Failed to check user status');
+        setError(statusResponse.message || 'Failed to check user status');
         setStep('error');
       }
-    } catch (err) {
-      setError('Network error. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Network error. Please try again.');
       setStep('error');
     } finally {
       setLoading(false);
@@ -90,35 +90,71 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
       return;
     }
 
-    if (!treasuryAddress.trim()) {
-      setError('Treasury address is required');
-      return;
-    }
-
     setLoading(true);
     setError(null);
     setStep('staking');
 
     try {
-      // For demo purposes, use a test private key (in production, use MetaMask signing)
-      const testPrivateKey = process.env.REACT_APP_TEST_PRIVATE_KEY || '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a';
+      // Step 1: Get treasury address and token contract details
+      const treasuryAddress = import.meta.env.VITE_TREASURY_ADDRESS || "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+      const tokenAddress = import.meta.env.VITE_REWARD_TOKEN_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+      
+      // Step 2: Request MetaMask to send 10 GCR tokens to treasury
+      if (!window.ethereum) {
+        throw new Error('MetaMask not found');
+      }
 
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/stake/register-and-stake`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          identifier,
-          longevity,
-          privateKey: testPrivateKey, // In production, handle this securely
-          treasuryAddress
-        }),
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
+      // ERC20 token contract interface (simplified)
+      const tokenABI = [
+        "function transfer(address to, uint256 amount) external returns (bool)",
+        "function balanceOf(address account) external view returns (uint256)",
+        "function decimals() external view returns (uint8)"
+      ];
+
+      const tokenContract = new ethers.Contract(tokenAddress, tokenABI, signer);
+
+      // Check user's token balance
+      const balance = await tokenContract.balanceOf(wallet.address);
+      const stakeAmount = ethers.parseEther('10'); // 10 GCR tokens
+
+      if (balance < stakeAmount) {
+        throw new Error(`Insufficient GCR tokens. Need 10 GCR, have ${ethers.formatEther(balance)} GCR`);
+      }
+
+      toast('Please approve the transaction in MetaMask to stake 10 GCR tokens', {
+        icon: '💰',
+        duration: 4000
       });
 
-      const data = await response.json();
+      // Send 10 GCR tokens to treasury
+      const stakeTx = await tokenContract.transfer(treasuryAddress, stakeAmount);
+      
+      toast('Transaction submitted. Waiting for confirmation...', {
+        icon: '⏳',
+        duration: 6000
+      });
+      
+      // Wait for transaction confirmation
+      const receipt = await stakeTx.wait();
+      
+      if (!receipt || receipt.status !== 1) {
+        throw new Error('Transaction failed or was reverted');
+      }
 
-      if (data.success) {
+      toast.success('Stake transaction confirmed! Processing verification...');
+
+      // Step 3: Call API with transaction hash for verification
+      const response = await stakingApi.registerAndStake({
+        identifier,
+        longevity,
+        walletAddress: wallet.address,
+        stakeTransactionHash: stakeTx.hash
+      });
+
+      if (response.success && response.data) {
         setStep('success');
         
         // Auto-login and redirect to dashboard
@@ -134,11 +170,26 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
           onSuccess();
         }
       } else {
-        setError(data.message || 'Staking failed');
+        setError(response.message || 'Verification failed after successful staking');
         setStep('error');
       }
     } catch (err: any) {
-      setError(err.message || 'Staking failed');
+      console.error('Staking error:', err);
+      
+      let errorMessage = 'Staking failed';
+      if (err.message.includes('Insufficient GCR')) {
+        errorMessage = err.message;
+      } else if (err.message.includes('rejected')) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (err.message.includes('MetaMask')) {
+        errorMessage = 'MetaMask connection error';
+      } else if (err.message.includes('Transaction failed')) {
+        errorMessage = 'Blockchain transaction failed. Please try again.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
       setStep('error');
     } finally {
       setLoading(false);
@@ -188,11 +239,22 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
                 <div className="bg-gray-50 border rounded-lg p-4">
                   <h4 className="font-medium text-gray-900 mb-2">Account Status</h4>
                   <div className="space-y-1 text-sm">
-                    <p><span className="text-gray-600">Balance:</span> {userStatus.balance}</p>
-                    <p><span className="text-gray-600">Can Stake:</span> 
-                      {userStatus.canStake ? 
+                    <p><span className="text-gray-600">Registered:</span> 
+                      {userStatus.isRegistered ? 
                         <span className="text-green-600 ml-1">✅ Yes</span> : 
-                        <span className="text-red-600 ml-1">❌ Insufficient balance</span>
+                        <span className="text-gray-600 ml-1">❌ No</span>
+                      }
+                    </p>
+                    <p><span className="text-gray-600">Verified:</span> 
+                      {userStatus.isVerified ? 
+                        <span className="text-green-600 ml-1">✅ Yes</span> : 
+                        <span className="text-gray-600 ml-1">❌ No</span>
+                      }
+                    </p>
+                    <p><span className="text-gray-600">Has Staked:</span> 
+                      {userStatus.hasStaked ? 
+                        <span className="text-green-600 ml-1">✅ Yes ({userStatus.stakeAmount} GCR)</span> : 
+                        <span className="text-gray-600 ml-1">❌ No</span>
                       }
                     </p>
                   </div>
@@ -226,23 +288,24 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Treasury Address
-                </label>
-                <input
-                  type="text"
-                  value={treasuryAddress}
-                  onChange={(e) => setTreasuryAddress(e.target.value)}
-                  placeholder="0x..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Treasury address where stakes are held</p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start space-x-2">
+                  <Coins className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900 mb-1">How it works:</p>
+                    <ol className="list-decimal list-inside text-blue-800 space-y-1">
+                      <li>You'll be prompted to approve a MetaMask transaction</li>
+                      <li>10 GCR tokens will be transferred to the treasury</li>
+                      <li>Your account will be automatically verified</li>
+                      <li>You can then submit reports to the blockchain</li>
+                    </ol>
+                  </div>
+                </div>
               </div>
 
               <button
                 onClick={handleStaking}
-                disabled={!userStatus?.canStake || loading}
+                disabled={loading}
                 className="w-full bg-primary-600 text-white py-3 px-4 rounded-md font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
               >
                 {loading ? (
@@ -261,13 +324,13 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
               <Loader className="animate-spin h-12 w-12 text-primary-600 mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">Processing Your Stake</h3>
               <p className="text-gray-600 mb-4">
-                Please wait while we register your account, process your stake, and verify your status.
+                Processing MetaMask transaction and verifying your account...
               </p>
               <div className="text-left bg-gray-50 rounded-lg p-4 text-sm">
                 <div className="space-y-2">
-                  <p>🔄 Registering user account...</p>
-                  <p>💰 Transferring 10 GCR to treasury...</p>
-                  <p>✅ Auto-verifying account...</p>
+                  <p>� Sending 10 GCR tokens to treasury via MetaMask...</p>
+                  <p>⏳ Waiting for transaction confirmation...</p>
+                  <p>🔄 Registering and verifying account...</p>
                 </div>
               </div>
             </div>

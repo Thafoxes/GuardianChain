@@ -129,6 +129,42 @@ export interface AdminStats {
   totalRewards: string;
 }
 
+// Staking Types
+export interface StakeStatus {
+  isRegistered: boolean;
+  isVerified: boolean;
+  hasStaked: boolean;
+  stakeAmount?: string;
+  registrationTx?: string;
+  stakeTx?: string;
+}
+
+export interface StakeBalance {
+  balance: string;
+  formatted: string;
+}
+
+export interface StakeRegistrationRequest {
+  identifier: string;
+  longevity: number;
+  walletAddress: string;
+  stakeTransactionHash: string;
+}
+
+export interface StakeRegistrationResponse {
+  user: User;
+  txHash: string;
+  stakeAmount: string;
+  verified: boolean;
+}
+
+export interface UserStakeInfo {
+  isRegistered: boolean;
+  identifier: string;
+  longevity: number;
+  registrationTime: string;
+}
+
 // Error Types
 export interface AppError {
   message: string;

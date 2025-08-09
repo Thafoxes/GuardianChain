@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Send, Shield, Eye, EyeOff, FileText, Tag, User, Clock, UserCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
-import { reportApi, userApi } from '../services/api';
-import VerificationModal from '../components/VerificationModal';
+import { reportApi, stakingApi } from '../services/api';
+import StakingModal from '../components/StakingModal';
 import toast from 'react-hot-toast';
 
 const SubmitReportPage = () => {
@@ -19,7 +19,7 @@ const SubmitReportPage = () => {
     isVerified: false,
     canSubmitReports: false
   });
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [showStakingModal, setShowStakingModal] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -40,9 +40,13 @@ const SubmitReportPage = () => {
 
       try {
         setIsCheckingVerification(true);
-        const response = await userApi.getVerificationStatus(wallet.address);
-        if (response.data) {
-          setVerificationStatus(response.data);
+        const response = await stakingApi.getStatus(wallet.address);
+        if (response.success && response.data) {
+          setVerificationStatus({
+            isRegistered: response.data.isRegistered,
+            isVerified: response.data.isVerified,
+            canSubmitReports: response.data.isVerified // Can submit reports if verified
+          });
         }
       } catch (error) {
         console.error('Failed to check verification status:', error);
@@ -55,13 +59,42 @@ const SubmitReportPage = () => {
     checkVerificationStatus();
   }, [wallet.isConnected, wallet.address]);
 
+  // Auto-refresh verification status when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && wallet.isConnected && wallet.address) {
+        // Re-check verification status when tab becomes visible
+        setTimeout(() => {
+          stakingApi.getStatus(wallet.address!)
+            .then(response => {
+              if (response.success && response.data) {
+                setVerificationStatus({
+                  isRegistered: response.data.isRegistered,
+                  isVerified: response.data.isVerified,
+                  canSubmitReports: response.data.isVerified
+                });
+              }
+            })
+            .catch(error => console.error('Failed to refresh verification status:', error));
+        }, 1000); // Small delay to allow any pending transactions to complete
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [wallet.isConnected, wallet.address]);
+
   const handleVerificationComplete = () => {
     // Refresh verification status after registration
     if (wallet.address) {
-      userApi.getVerificationStatus(wallet.address)
+      stakingApi.getStatus(wallet.address)
         .then(response => {
-          if (response.data) {
-            setVerificationStatus(response.data);
+          if (response.success && response.data) {
+            setVerificationStatus({
+              isRegistered: response.data.isRegistered,
+              isVerified: response.data.isVerified,
+              canSubmitReports: response.data.isVerified
+            });
           }
         })
         .catch(error => console.error('Failed to refresh verification status:', error));
@@ -116,7 +149,7 @@ const SubmitReportPage = () => {
     if (!verificationStatus.canSubmitReports) {
       if (!verificationStatus.isRegistered) {
         toast.error('Please register your account first');
-        setShowVerificationModal(true);
+        setShowStakingModal(true);
         return;
       } else if (!verificationStatus.isVerified) {
         toast.error('Your account is not verified yet. Please wait for admin approval.');
@@ -211,49 +244,58 @@ const SubmitReportPage = () => {
               {!verificationStatus.isRegistered ? (
                 <div>
                   <p className="text-gray-600 mb-6">
-                    You need to register your account before you can submit reports to the blockchain.
+                    You need to stake 10 GCR tokens to get verified and submit reports to the blockchain.
                   </p>
                   <button
-                    onClick={() => setShowVerificationModal(true)}
+                    onClick={() => setShowStakingModal(true)}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                   >
-                    Register Account
+                    Stake & Get Verified
+                  </button>
+                </div>
+              ) : verificationStatus.isVerified ? (
+                <div>
+                  <p className="text-green-600 mb-4">
+                    ✅ Your account is verified! You can now submit reports.
+                  </p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                  >
+                    Continue to Submit Report
                   </button>
                 </div>
               ) : (
                 <div>
                   <p className="text-gray-600 mb-4">
-                    Your account is registered but awaiting admin verification.
+                    Your account is registered and staked. Verification is being processed automatically.
                   </p>
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
                     <div className="flex items-center space-x-2">
                       <Clock className="w-5 h-5 text-amber-600" />
-                      <span className="text-amber-800 font-medium">Pending Verification</span>
+                      <span className="text-amber-800 font-medium">Processing Verification</span>
                     </div>
                     <p className="text-amber-700 text-sm mt-1">
-                      Please wait for an administrator to verify your account. This usually takes a few minutes.
+                      Your stake has been processed. Verification should complete within a few seconds.
                     </p>
                   </div>
                   <button
                     onClick={handleVerificationComplete}
                     className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                   >
-                    Refresh Status
+                    Check Status Again
                   </button>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Verification Modal */}
-          {wallet.address && (
-            <VerificationModal
-              isOpen={showVerificationModal}
-              onClose={() => setShowVerificationModal(false)}
-              walletAddress={wallet.address}
-              onVerificationComplete={handleVerificationComplete}
-            />
-          )}
+          {/* Staking Modal */}
+          <StakingModal
+            isOpen={showStakingModal}
+            onClose={() => setShowStakingModal(false)}
+            onSuccess={handleVerificationComplete}
+          />
         </div>
       </div>
     );
@@ -515,15 +557,12 @@ const SubmitReportPage = () => {
           </div>
         </div>
 
-        {/* Verification Modal */}
-        {wallet.address && (
-          <VerificationModal
-            isOpen={showVerificationModal}
-            onClose={() => setShowVerificationModal(false)}
-            walletAddress={wallet.address}
-            onVerificationComplete={handleVerificationComplete}
-          />
-        )}
+        {/* Staking Modal */}
+        <StakingModal
+          isOpen={showStakingModal}
+          onClose={() => setShowStakingModal(false)}
+          onSuccess={handleVerificationComplete}
+        />
       </div>
     </div>
   );
