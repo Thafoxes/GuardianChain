@@ -43,7 +43,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     testnet: {
       chainId: 0x5aff, // 23295
       chainName: 'Sapphire Testnet',
-      rpcUrls: ['https://testnet.sapphire.oasis.io'],
+      rpcUrls: ['https://testnet.sapphire.oasis.dev'],
       nativeCurrency: {
         name: 'TEST',
         symbol: 'TEST',
@@ -67,6 +67,13 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   // Determine target network from environment variable
   const networkName = import.meta.env.VITE_NETWORK || 'testnet';
   const TARGET_NETWORK = SAPPHIRE_NETWORKS[networkName as keyof typeof SAPPHIRE_NETWORKS] || SAPPHIRE_NETWORKS.testnet;
+  
+  // Debug logging
+  console.log('🔧 Network configuration:', {
+    networkName,
+    TARGET_NETWORK,
+    env: import.meta.env.VITE_NETWORK
+  });
 
   // Check if MetaMask is installed
   const isMetaMaskInstalled = () => {
@@ -135,21 +142,42 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       }
 
       const provider = new BrowserProvider(window.ethereum);
-      const network = await provider.getNetwork();
       const signer = await provider.getSigner();
       const address = await signer.getAddress();
-      const balance = await provider.getBalance(address);
+      
+      // Get network info
+      let network;
+      let chainId;
+      try {
+        network = await provider.getNetwork();
+        chainId = Number(network.chainId);
+      } catch (networkError) {
+        console.warn('Could not get network info, using fallback:', networkError);
+        // Fallback to getting chainId directly from MetaMask
+        const hexChainId = await window.ethereum.request({ method: 'eth_chainId' });
+        chainId = parseInt(hexChainId, 16);
+      }
+
+      // Get balance with error handling
+      let balance = '0';
+      try {
+        const balanceWei = await provider.getBalance(address);
+        balance = ethers.formatEther(balanceWei);
+      } catch (balanceError) {
+        console.warn('Could not get balance, using fallback:', balanceError);
+        // Don't throw error, just use default balance
+      }
 
       setWallet({
         isConnected: true,
         address,
-        chainId: Number(network.chainId),
-        balance: ethers.formatEther(balance),
+        chainId,
+        balance,
         tokenBalance: null, // Will be fetched separately
       });
 
       // Check if on correct network
-      if (Number(network.chainId) !== TARGET_NETWORK.chainId) {
+      if (chainId !== TARGET_NETWORK.chainId) {
         toast.error('Please switch to Sapphire network');
         await switchToSapphire();
       } else {
