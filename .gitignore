@@ -1,3 +1,52 @@
+# Environment files with sensitive information
+.env
+.env.local
+.env.production
+.env.development
 frontend/.env
+frontend/.env.local
+frontend/.env.production
+frontend/.env.development
+api/.env
+api/.env.local
+backend/.env
+backend/.env.local
+
+# Docker compose with sensitive data
+docker-compose.local.yml
+docker-compose.*.local.yml
+
+# Private keys and secrets
+*.key
+*.pem
+secrets/
+private/
+
+# Temporary files
 description.txt
-frontend/.env
+*.tmp
+*.temp
+
+# Logs
+logs/
+*.log
+
+# Node modules
+node_modules/
+*/node_modules/
+
+# Build outputs
+dist/
+build/
+*/dist/
+*/build/
+
+# IDE files
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

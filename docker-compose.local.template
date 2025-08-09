@@ -1,0 +1,25 @@
+services:
+  guardianchain:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - NETWORK=testnet
+      - REWARD_TOKEN_ADDRESS=${REWARD_TOKEN_ADDRESS}
+      - USER_VERIFICATION_ADDRESS=${USER_VERIFICATION_ADDRESS}
+      - REPORT_CONTRACT_ADDRESS=${REPORT_CONTRACT_ADDRESS}
+      - BACKEND_PRIVATE_KEY=${BACKEND_PRIVATE_KEY}
+      - TREASURY_ADDRESS=${TREASURY_ADDRESS}
+      - STAKE_AMOUNT=${STAKE_AMOUNT:-10}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3001}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3001}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
