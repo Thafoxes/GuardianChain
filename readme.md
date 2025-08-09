@@ -36,7 +36,7 @@ GuardianChain revolutionizes whistleblowing by providing a secure, anonymous, an
 
 **Live Demo**: [Watch on YouTube](https://youtu.be/l2_NXuZG2Kg)
 
-Experience the platform live at: [Your deployment URL]
+Experience the platform live at: https://guardianchain-eua8.onrender.com/
 
 ## 🏗️ Technical Architecture
 
