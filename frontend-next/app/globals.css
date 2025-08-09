@@ -1,15 +1,78 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Base theme tokens in HSL for Tailwind v4 + shadcn/ui */
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(222 47% 11%);
+
+  /* Soften cards to reduce contrast vs. page background */
+  --card: hsl(210 20% 98%);
+  --card-foreground: var(--foreground);
+
+  --popover: var(--background);
+  --popover-foreground: var(--foreground);
+
+  /* Primary maps to previous primary-600 (#2563eb) */
+  --primary: hsl(221 83% 53%);
+  --primary-foreground: hsl(0 0% 100%);
+
+  /* Secondary matches previous light slate button bg (#e2e8f0) */
+  --secondary: hsl(210 16% 93%);
+  --secondary-foreground: hsl(222 47% 11%);
+
+  /* Muted/Accent tuned to previous light slate surfaces for subtle hovers */
+  --muted: hsl(210 20% 96%);
+  --muted-foreground: hsl(215 16% 47%);
+
+  --accent: hsl(210 20% 96%);
+  --accent-foreground: hsl(222 47% 11%);
+
+  /* Destructive maps to previous accent red */
+  --destructive: hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 98%);
+
+  /* Lighten borders/inputs/ring to reduce contrast */
+  --border: hsl(215 20% 90%);
+  --input: hsl(215 20% 90%);
+  --ring: hsl(221 83% 53%);
+
+  /* Radius close to rounded-lg/xl from previous UI */
+  --radius: 0.75rem;
 }
 
 @theme inline {
+  /* Expose shadcn/ui tokens */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
-  /* Extended color tokens ported from Vite app */
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius: var(--radius);
+
+  /* Keep extended color tokens ported from Vite app */
   --color-primary-50: #eff6ff;
   --color-primary-100: #dbeafe;
   --color-primary-200: #bfdbfe;
