@@ -1,5 +1,6 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
+import { ethers } from 'ethers';
 import blockchainService from '../services/blockchain.js';
 import { logger } from '../utils/logger.js';
 
@@ -345,6 +346,279 @@ router.get('/stats', async (req, res) => {
       success: false,
       message: 'Failed to fetch statistics',
       error: error.message
+    });
+  }
+});
+
+/**
+ * @route POST /api/admin/reports/reward
+ * @desc Verify a report so reporter can claim reward (admin only)
+ * @access Private (Admin)
+ */
+router.post('/reports/reward', [
+  body('reportId').isInt({ min: 1 }).withMessage('Valid report ID required'),
+  body('reason').optional().isLength({ max: 500 }).withMessage('Reason must be less than 500 characters')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { reportId, reason } = req.body;
+
+    // Use admin credentials from environment
+    const adminPrivateKey = process.env.BACKEND_PRIVATE_KEY || process.env.TESTNET_PRIVATE_KEY;
+    if (!adminPrivateKey) {
+      return res.status(500).json({
+        success: false,
+        message: 'Admin service not configured'
+      });
+    }
+
+    const adminSigner = blockchainService.createSigner(adminPrivateKey);
+    const reportContract = blockchainService.getContractWithSigner('ReportContract', adminSigner);
+
+    // Get report details
+    const reportData = await reportContract.getReport(reportId);
+    const reporterAddress = reportData.reporter;
+
+    // Check if report exists and is in valid state
+    if (reportData.status === 4) { // Already closed
+      return res.status(400).json({
+        success: false,
+        message: 'Report is already closed'
+      });
+    }
+
+    if (reportData.status === 2) { // Already verified
+      return res.status(400).json({
+        success: false,
+        message: 'Report is already verified. Reporter can claim reward.',
+        data: {
+          reportId,
+          status: 'verified',
+          reporterAddress,
+          canClaimReward: !reportData.rewardClaimed
+        }
+      });
+    }
+
+    // Step 1: Update report status to Verified (status = 2)
+    // This will automatically mint VERIFICATION_REWARD to the admin who verified it
+    logger.info(`🔄 Verifying report ${reportId} by admin ${adminSigner.address}`);
+    const verifyTx = await reportContract.updateReportStatus(reportId, 2); // 2 = Verified
+    await verifyTx.wait();
+    logger.info(`✅ Report ${reportId} verified: ${verifyTx.hash}`);
+
+    res.json({
+      success: true,
+      message: `Report ${reportId} verified successfully. Reporter can now claim their reward.`,
+      data: {
+        reportId,
+        status: 'verified',
+        reporterAddress,
+        verifyTxHash: verifyTx.hash,
+        reason: reason || 'Report validated by admin',
+        note: 'Reporter must call claimReward() function to receive tokens'
+      }
+    });
+
+    logger.info(`🎉 Report ${reportId} verified by admin: ${adminSigner.address}`);
+
+  } catch (error) {
+    logger.error('Error verifying report:', error);
+    
+    let message = 'Failed to verify report';
+    if (error.message.includes('Report not found')) {
+      message = 'Report not found';
+    } else if (error.message.includes('Only admin') || error.message.includes('Only authorized')) {
+      message = 'Not authorized to verify reports';
+    } else if (error.message.includes('Cannot update closed report')) {
+      message = 'Cannot update a closed report';
+    }
+
+    res.status(500).json({
+      success: false,
+      message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * @route POST /api/admin/reports/cancel
+ * @desc Reject a report and mark it as invalid (admin only)
+ * @access Private (Admin)
+ */
+router.post('/reports/cancel', [
+  body('reportId').isInt({ min: 1 }).withMessage('Valid report ID required'),
+  body('reason').isLength({ min: 1, max: 500 }).withMessage('Rejection reason is required (max 500 characters)')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { reportId, reason } = req.body;
+
+    // Use admin credentials from environment
+    const adminPrivateKey = process.env.BACKEND_PRIVATE_KEY || process.env.TESTNET_PRIVATE_KEY;
+    if (!adminPrivateKey) {
+      return res.status(500).json({
+        success: false,
+        message: 'Admin service not configured'
+      });
+    }
+
+    const adminSigner = blockchainService.createSigner(adminPrivateKey);
+    const reportContract = blockchainService.getContractWithSigner('ReportContract', adminSigner);
+
+    // Get report details
+    const reportData = await reportContract.getReport(reportId);
+
+    // Check if report exists and is in valid state
+    if (reportData.status === 4) { // Already closed
+      return res.status(400).json({
+        success: false,
+        message: 'Report is already closed'
+      });
+    }
+
+    if (reportData.status === 3) { // Already rejected
+      return res.status(400).json({
+        success: false,
+        message: 'Report is already rejected'
+      });
+    }
+
+    // Update report status to rejected (status = 3)
+    logger.info(`🔄 Rejecting report ${reportId} - Reason: ${reason}`);
+    const updateTx = await reportContract.updateReportStatus(reportId, 3); // 3 = REJECTED
+    await updateTx.wait();
+    logger.info(`✅ Report ${reportId} marked as rejected: ${updateTx.hash}`);
+
+    res.json({
+      success: true,
+      message: `Report ${reportId} rejected successfully`,
+      data: {
+        reportId,
+        status: 'rejected',
+        reason,
+        txHash: updateTx.hash
+      }
+    });
+
+    logger.info(`🚫 Report ${reportId} rejected by admin: ${adminSigner.address} - Reason: ${reason}`);
+
+  } catch (error) {
+    logger.error('Error rejecting report:', error);
+    
+    let message = 'Failed to reject report';
+    if (error.message.includes('Report not found')) {
+      message = 'Report not found';
+    } else if (error.message.includes('Only admin') || error.message.includes('Only authorized')) {
+      message = 'Not authorized to reject reports';
+    } else if (error.message.includes('Cannot update closed report')) {
+      message = 'Cannot update a closed report';
+    }
+
+    res.status(500).json({
+      success: false,
+      message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * @route POST /api/admin/reports/close
+ * @desc Close a verified report case (admin only)
+ * @access Private (Admin)
+ */
+router.post('/reports/close', [
+  body('reportId').isInt({ min: 1 }).withMessage('Valid report ID required'),
+  body('reason').optional().isLength({ max: 500 }).withMessage('Reason must be less than 500 characters')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { reportId, reason } = req.body;
+
+    // Use admin credentials from environment
+    const adminPrivateKey = process.env.BACKEND_PRIVATE_KEY || process.env.TESTNET_PRIVATE_KEY;
+    if (!adminPrivateKey) {
+      return res.status(500).json({
+        success: false,
+        message: 'Admin service not configured'
+      });
+    }
+
+    const adminSigner = blockchainService.createSigner(adminPrivateKey);
+    const reportContract = blockchainService.getContractWithSigner('ReportContract', adminSigner);
+
+    // Get report details
+    const reportData = await reportContract.getReport(reportId);
+
+    // Check if report exists and is in valid state
+    if (reportData.status === 4) { // Already closed
+      return res.status(400).json({
+        success: false,
+        message: 'Report is already closed'
+      });
+    }
+
+    // Update report status to closed (status = 4)
+    logger.info(`🔄 Closing report ${reportId} - Reason: ${reason || 'Case resolved'}`);
+    const updateTx = await reportContract.updateReportStatus(reportId, 4); // 4 = CLOSED
+    await updateTx.wait();
+    logger.info(`✅ Report ${reportId} marked as closed: ${updateTx.hash}`);
+
+    res.json({
+      success: true,
+      message: `Report ${reportId} closed successfully`,
+      data: {
+        reportId,
+        status: 'closed',
+        reason: reason || 'Case resolved',
+        txHash: updateTx.hash
+      }
+    });
+
+    logger.info(`🔒 Report ${reportId} closed by admin: ${adminSigner.address}`);
+
+  } catch (error) {
+    logger.error('Error closing report:', error);
+    
+    let message = 'Failed to close report';
+    if (error.message.includes('Report not found')) {
+      message = 'Report not found';
+    } else if (error.message.includes('Only admin') || error.message.includes('Only authorized')) {
+      message = 'Not authorized to close reports';
+    } else if (error.message.includes('Cannot update closed report')) {
+      message = 'Report is already closed';
+    }
+
+    res.status(500).json({
+      success: false,
+      message,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

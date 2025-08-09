@@ -38,26 +38,53 @@ export interface Report {
   severity?: 'low' | 'medium' | 'high' | 'critical';
   reporter: string;
   timestamp: string;
-  status: 'submitted' | 'investigating' | 'verified' | 'rejected';
+  status: 'submitted' | 'investigating' | 'verified' | 'rejected' | 'closed';
   verifiedBy?: string;
   verificationTimestamp?: string;
   contentHash?: string;
   rewardClaimed: boolean;
+  rewardAmount?: string;
+  rewardTimestamp?: string;
+  rewardedBy?: string;
   anonymous?: boolean;
   investigator?: string;
 }
 
 export enum ReportStatus {
   PENDING = 0,
-  VERIFIED = 1,
-  REJECTED = 2,
-  INVESTIGATING = 3
+  INVESTIGATING = 1,
+  VERIFIED = 2,
+  REJECTED = 3,
+  CLOSED = 4
 }
 
 export interface ReportSubmission {
   content: string;
   category?: string;
   anonymous?: boolean;
+}
+
+// Admin Report Management Types
+export interface RewardReportRequest {
+  reportId: number;
+  rewardAmount: string;
+  reason?: string;
+}
+
+export interface CancelReportRequest {
+  reportId: number;
+  reason: string;
+}
+
+export interface AdminReportAction {
+  success: boolean;
+  message: string;
+  data?: {
+    reportId: number;
+    status: string;
+    txHash?: string;
+    rewardAmount?: string;
+  };
 }
 
 // Wallet Types

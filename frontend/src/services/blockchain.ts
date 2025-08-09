@@ -525,6 +525,290 @@ export class BlockchainService {
       return false;
     }
   }
+
+  // NEW: Get user reports from blockchain
+  async getUserReports(userAddress?: string): Promise<any[]> {
+    if (!this.provider) {
+      throw new Error('Provider not initialized');
+    }
+
+    try {
+      const address = userAddress || (this.signer ? await this.signer.getAddress() : null);
+      if (!address) {
+        throw new Error('No wallet address available');
+      }
+
+      console.log('📋 Fetching user reports for:', address);
+
+      // Get contract instance
+      const contract = new ethers.Contract(
+        REPORT_CONTRACT_ADDRESS,
+        [
+          {
+            "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
+            "name": "getUserReports",
+            "outputs": [{"internalType": "uint256[]", "name": "", "type": "uint256[]"}],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "inputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}],
+            "name": "getReportInfo",
+            "outputs": [
+              {"internalType": "uint256", "name": "id", "type": "uint256"},
+              {"internalType": "address", "name": "reporter", "type": "address"},
+              {"internalType": "uint256", "name": "timestamp", "type": "uint256"},
+              {"internalType": "uint8", "name": "status", "type": "uint8"},
+              {"internalType": "address", "name": "verifiedBy", "type": "address"},
+              {"internalType": "uint256", "name": "verificationTimestamp", "type": "uint256"},
+              {"internalType": "bytes32", "name": "contentHash", "type": "bytes32"},
+              {"internalType": "bool", "name": "rewardClaimed", "type": "bool"}
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ],
+        this.provider
+      );
+
+      // Get user's report IDs
+      const reportIds = await contract.getUserReports(address);
+      console.log('📋 User report IDs:', reportIds.map((id: any) => id.toString()));
+
+      // Fetch detailed info for each report
+      const reports = [];
+      for (const reportId of reportIds) {
+        try {
+          const reportInfo = await contract.getReportInfo(reportId);
+          reports.push({
+            id: Number(reportInfo.id),
+            reporter: reportInfo.reporter,
+            timestamp: Number(reportInfo.timestamp), // Keep as number for sorting
+            status: this.getStatusString(Number(reportInfo.status)),
+            verifiedBy: reportInfo.verifiedBy,
+            verificationTimestamp: Number(reportInfo.verificationTimestamp),
+            contentHash: reportInfo.contentHash,
+            rewardClaimed: reportInfo.rewardClaimed,
+            title: `Report #${Number(reportInfo.id)}`,
+            category: 'general',
+            severity: 'medium'
+          });
+        } catch (error) {
+          console.warn(`Failed to fetch report ${reportId}:`, error);
+        }
+      }
+
+      // Sort by timestamp (newest first)
+      reports.sort((a, b) => b.timestamp - a.timestamp);
+      
+      console.log('📋 Fetched', reports.length, 'reports for user');
+      return reports;
+    } catch (error: any) {
+      console.error('📋 Error fetching user reports:', error);
+      throw new Error(`Failed to fetch user reports: ${error.message}`);
+    }
+  }
+
+  // NEW: Get all reports for admin view
+  async getAllReports(limit: number = 50): Promise<any[]> {
+    if (!this.provider) {
+      throw new Error('Provider not initialized');
+    }
+
+    try {
+      console.log('📋 Fetching all reports (admin view)...');
+
+      const contract = new ethers.Contract(
+        REPORT_CONTRACT_ADDRESS,
+        [
+          {
+            "inputs": [],
+            "name": "getTotalReports",
+            "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "inputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}],
+            "name": "getReportInfo",
+            "outputs": [
+              {"internalType": "uint256", "name": "id", "type": "uint256"},
+              {"internalType": "address", "name": "reporter", "type": "address"},
+              {"internalType": "uint256", "name": "timestamp", "type": "uint256"},
+              {"internalType": "uint8", "name": "status", "type": "uint8"},
+              {"internalType": "address", "name": "verifiedBy", "type": "address"},
+              {"internalType": "uint256", "name": "verificationTimestamp", "type": "uint256"},
+              {"internalType": "bytes32", "name": "contentHash", "type": "bytes32"},
+              {"internalType": "bool", "name": "rewardClaimed", "type": "bool"}
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ],
+        this.provider
+      );
+
+      const totalReports = await contract.getTotalReports();
+      const totalNum = Number(totalReports);
+      console.log('📊 Total reports on blockchain:', totalNum);
+
+      const reports = [];
+      const start = Math.max(1, totalNum - limit + 1);
+      
+      for (let i = totalNum; i >= start; i--) {
+        try {
+          const reportInfo = await contract.getReportInfo(i);
+          reports.push({
+            id: Number(reportInfo.id),
+            reporter: reportInfo.reporter,
+            timestamp: Number(reportInfo.timestamp), // Keep as number for sorting
+            status: this.getStatusString(Number(reportInfo.status)),
+            verifiedBy: reportInfo.verifiedBy,
+            verificationTimestamp: Number(reportInfo.verificationTimestamp),
+            contentHash: reportInfo.contentHash,
+            rewardClaimed: reportInfo.rewardClaimed,
+            title: `Report #${Number(reportInfo.id)}`,
+            category: 'general',
+            severity: 'medium'
+          });
+        } catch (error) {
+          console.warn(`Failed to fetch report ${i}:`, error);
+        }
+      }
+
+      console.log('📋 Fetched', reports.length, 'reports (admin view)');
+      return reports;
+    } catch (error: any) {
+      console.error('📋 Error fetching all reports:', error);
+      throw new Error(`Failed to fetch reports: ${error.message}`);
+    }
+  }
+
+  // NEW: Admin function to update report status
+  async updateReportStatus(reportId: number, status: number): Promise<string> {
+    if (!this.signer) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      console.log('📝 Updating report status:', { reportId, status });
+
+      const contract = new ethers.Contract(
+        REPORT_CONTRACT_ADDRESS,
+        [
+          {
+            "inputs": [
+              {"internalType": "uint256", "name": "reportId", "type": "uint256"},
+              {"internalType": "uint8", "name": "newStatus", "type": "uint8"}
+            ],
+            "name": "updateReportStatus",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        this.signer
+      );
+
+      const tx = await contract.updateReportStatus(reportId, status);
+      await tx.wait();
+      
+      console.log('✅ Report status updated:', tx.hash);
+      return tx.hash;
+    } catch (error: any) {
+      console.error('📝 Error updating report status:', error);
+      throw new Error(`Failed to update report status: ${error.message}`);
+    }
+  }
+
+  // NEW: Claim reward function
+  async claimReward(reportId: number): Promise<string> {
+    if (!this.signer) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      console.log('💰 Claiming reward for report:', reportId);
+
+      const contract = new ethers.Contract(
+        REPORT_CONTRACT_ADDRESS,
+        [
+          {
+            "inputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}],
+            "name": "claimReward",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        this.signer
+      );
+
+      const tx = await contract.claimReward(reportId);
+      await tx.wait();
+      
+      console.log('✅ Reward claimed:', tx.hash);
+      return tx.hash;
+    } catch (error: any) {
+      console.error('💰 Error claiming reward:', error);
+      throw new Error(`Failed to claim reward: ${error.message}`);
+    }
+  }
+
+  // Helper function to convert status number to string
+  private getStatusString(status: number): string {
+    const statusMap: { [key: number]: string } = {
+      0: 'submitted',    // Pending
+      1: 'investigating', // Investigating
+      2: 'verified',     // Verified
+      3: 'rejected',     // Rejected
+      4: 'closed'        // Closed
+    };
+    return statusMap[status] || 'unknown';
+  }
+
+  // Helper function to convert status string to number
+  getStatusNumber(status: string): number {
+    const statusMap: { [key: string]: number } = {
+      'submitted': 0,    // Pending
+      'investigating': 1, // Investigating
+      'verified': 2,     // Verified
+      'rejected': 3,     // Rejected
+      'closed': 4        // Closed
+    };
+    return statusMap[status] ?? 0;
+  }
+
+  // Check if user is authorized verifier (admin)
+  async isAuthorizedVerifier(address?: string): Promise<boolean> {
+    if (!this.provider) {
+      throw new Error('Provider not initialized');
+    }
+
+    try {
+      const userAddress = address || (this.signer ? await this.signer.getAddress() : null);
+      if (!userAddress) return false;
+
+      const contract = new ethers.Contract(
+        REPORT_CONTRACT_ADDRESS,
+        [
+          {
+            "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+            "name": "authorizedVerifiers",
+            "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ],
+        this.provider
+      );
+
+      return await contract.authorizedVerifiers(userAddress);
+    } catch (error) {
+      console.error('Error checking if user is authorized verifier:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

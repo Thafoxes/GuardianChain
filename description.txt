@@ -1,0 +1,12 @@
+Listen carefully, I want to make the report submission directly to metamask to upload the repot. 
+in the frontend submit report, I do not want to submit the report through the admin itself. I want to submit through the wallet user.
+Then in the report list, show only the wallet user reported list (can do frontend filter better). (getReportInfo in the contract)
+when a certain report is clicked (report is gathered from the blockchain), user can decrypt with metamask.
+the admin can see reporter report as well and can perform reward status and close the report. Please refer to the UserVerification.sol
+I want the reports list shows the findings from the blockchain. not preset from the API, 
+you can work on the API to pull the request or send the request.
+or
+do it directly with the metamask and frontend.
+
+Please hide all the private key in the project in .env file. do not expose all the private key.
+make sure this system follows the web3 goals.

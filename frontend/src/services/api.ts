@@ -202,6 +202,37 @@ export const adminApi = {
 
   removeVerifier: (address: string): Promise<ApiResponse<{ txHash: string }>> =>
     api.delete(`/admin/verifiers/${address}`),
+
+  rewardReport: (data: {
+    reportId: number;
+    reason?: string;
+  }): Promise<ApiResponse<{
+    reportId: number;
+    status: string;
+    verifyTxHash: string;
+    reporterAddress: string;
+  }>> =>
+    api.post('/admin/reports/reward', data),
+
+  cancelReport: (data: {
+    reportId: number;
+    reason: string;
+  }): Promise<ApiResponse<{
+    reportId: number;
+    status: string;
+    reason: string;
+  }>> =>
+    api.post('/admin/reports/cancel', data),
+
+  closeReport: (data: {
+    reportId: number;
+    reason?: string;
+  }): Promise<ApiResponse<{
+    reportId: number;
+    status: string;
+    reason: string;
+  }>> =>
+    api.post('/admin/reports/close', data),
 };
 
 // Health API

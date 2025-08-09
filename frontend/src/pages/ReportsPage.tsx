@@ -1,16 +1,34 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, FileText, Clock, CheckCircle, AlertTriangle, Eye, Plus } from 'lucide-react';
-import { reportApi } from '../services/api';
-import { Report } from '../types';
+import { useWallet } from '../contexts/WalletContext';
+import { blockchainService } from '../services/blockchain';
 import toast from 'react-hot-toast';
 
+interface BlockchainReport {
+  id: number;
+  reporter: string;
+  timestamp: number;
+  status: string;
+  verifiedBy: string;
+  verificationTimestamp: number;
+  contentHash: string;
+  rewardClaimed: boolean;
+  title?: string; // Will be available after decryption
+  category?: string;
+  severity?: string;
+  anonymous?: boolean;
+  content?: string; // For content preview
+}
+
 const ReportsPage = () => {
-  const [reports, setReports] = useState<Report[]>([]);
+  const { wallet } = useWallet();
+  const [reports, setReports] = useState<BlockchainReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const statusOptions = [
     { value: 'all', label: 'All Status', color: 'text-gray-600' },
@@ -45,20 +63,61 @@ const ReportsPage = () => {
 
   useEffect(() => {
     fetchReports();
-  }, [statusFilter, categoryFilter]);
+  }, [wallet.address, statusFilter, categoryFilter]);
 
   const fetchReports = async () => {
+    if (!wallet.isConnected || !wallet.address) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const response = await reportApi.getReports({
-        status: statusFilter === 'all' ? undefined : statusFilter,
-        category: categoryFilter === 'all' ? undefined : categoryFilter,
-        limit: 50
-      });
-      setReports(response.data.reports);
+      console.log('📋 Fetching reports from blockchain...');
+
+      // Initialize blockchain service if needed
+      if (!blockchainService.isConnected()) {
+        await blockchainService.initializeFromExistingProvider();
+      }
+
+      // Check if user is admin to determine which reports to fetch
+      const userIsAdmin = await blockchainService.isAuthorizedVerifier(wallet.address);
+      setIsAdmin(userIsAdmin);
+      
+      let blockchainReports: any[] = [];
+      
+      if (userIsAdmin) {
+        // Admin: fetch all reports
+        console.log('👑 Fetching all reports (admin view)');
+        blockchainReports = await blockchainService.getAllReports(100);
+      } else {
+        // Regular user: fetch only their own reports
+        console.log('👤 Fetching user reports for:', wallet.address);
+        blockchainReports = await blockchainService.getUserReports(wallet.address);
+      }
+
+      console.log('📋 Fetched reports:', blockchainReports.length);
+      
+      // Apply filters
+      let filteredReports = blockchainReports;
+      
+      if (statusFilter !== 'all') {
+        filteredReports = filteredReports.filter(report => report.status === statusFilter);
+      }
+      
+      if (categoryFilter !== 'all') {
+        filteredReports = filteredReports.filter(report => 
+          report.category && report.category === categoryFilter
+        );
+      }
+
+      console.log('📋 Filtered reports:', filteredReports.length);
+      setReports(filteredReports);
+      
     } catch (error: any) {
-      console.error('Failed to fetch reports:', error);
-      toast.error('Failed to load reports');
+      console.error('❌ Failed to fetch reports:', error);
+      toast.error('Failed to load reports from blockchain');
+      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -80,8 +139,9 @@ const ReportsPage = () => {
     return IconComponent;
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (timestamp: number | string) => {
+    const date = typeof timestamp === 'number' ? new Date(timestamp * 1000) : new Date(timestamp);
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -204,7 +264,7 @@ const ReportsPage = () => {
                           {report.title || `Report #${report.id}`}
                         </h3>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${severityColors[report.severity as keyof typeof severityColors] || 'text-gray-600 bg-gray-50'}`}>
-                          {report.severity?.charAt(0).toUpperCase() + report.severity?.slice(1)}
+                          {report.severity ? report.severity.charAt(0).toUpperCase() + report.severity.slice(1) : 'Medium'}
                         </span>
                       </div>
 

@@ -5,11 +5,14 @@ import { reportApi } from '../services/api';
 import { blockchainService } from '../services/blockchain';
 import { Report } from '../types';
 import { useWallet } from '../contexts/WalletContext';
+import { useAuth } from '../contexts/AuthContext';
+import AdminRewardActions from '../components/AdminRewardActions';
 import toast from 'react-hot-toast';
 
 const ReportDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const { wallet } = useWallet();
+  const { isAdmin } = useAuth();
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [decryptedContent, setDecryptedContent] = useState<any | null>(null);
@@ -19,14 +22,18 @@ const ReportDetailPage = () => {
     submitted: Clock,
     investigating: AlertTriangle,
     verified: CheckCircle,
-    rejected: FileText
+    rejected: FileText,
+    closed: Award,
+    cancelled: AlertTriangle
   };
 
   const statusColors = {
     submitted: 'text-blue-600 bg-blue-50',
     investigating: 'text-yellow-600 bg-yellow-50',
     verified: 'text-green-600 bg-green-50',
-    rejected: 'text-red-600 bg-red-50'
+    rejected: 'text-red-600 bg-red-50',
+    closed: 'text-purple-600 bg-purple-50',
+    cancelled: 'text-gray-600 bg-gray-50'
   };
 
   const severityColors = {
@@ -45,16 +52,87 @@ const ReportDetailPage = () => {
   const fetchReport = async (reportId: string) => {
     try {
       setLoading(true);
-      const response = await reportApi.getReport(reportId);
-      if (response.data) {
-        setReport(response.data);
+      
+      // Initialize blockchain service if needed
+      if (!blockchainService.isConnected()) {
+        await blockchainService.initializeFromExistingProvider();
       }
+      
+      // Get report info from blockchain
+      const reportNumber = parseInt(reportId);
+      console.log('📄 Fetching report from blockchain:', reportNumber);
+      
+      // Create contract instance to get report info
+      const ethers = await import('ethers');
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const contract = new ethers.Contract(
+        import.meta.env.VITE_CONTRACT_ADDRESS_REPORT_CONTRACT,
+        [
+          {
+            "inputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}],
+            "name": "getReportInfo",
+            "outputs": [
+              {"internalType": "uint256", "name": "id", "type": "uint256"},
+              {"internalType": "address", "name": "reporter", "type": "address"},
+              {"internalType": "uint256", "name": "timestamp", "type": "uint256"},
+              {"internalType": "uint8", "name": "status", "type": "uint8"},
+              {"internalType": "address", "name": "verifiedBy", "type": "address"},
+              {"internalType": "uint256", "name": "verificationTimestamp", "type": "uint256"},
+              {"internalType": "bytes32", "name": "contentHash", "type": "bytes32"},
+              {"internalType": "bool", "name": "rewardClaimed", "type": "bool"}
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ],
+        provider
+      );
+      
+      // Fetch actual report data from blockchain
+      const reportInfo = await contract.getReportInfo(reportNumber);
+      console.log('📄 Report info from blockchain:', reportInfo);
+      
+      // Convert status number to string
+      const statusMap: { [key: number]: string } = {
+        0: 'submitted',    // Pending
+        1: 'investigating', // Investigating
+        2: 'verified',     // Verified
+        3: 'rejected',     // Rejected
+        4: 'closed'        // Closed
+      };
+      
+      const status = statusMap[Number(reportInfo.status)] || 'submitted';
+      
+      // Create properly formatted report object
+      const blockchainReport: Report = {
+        id: Number(reportInfo.id),
+        reporter: reportInfo.reporter,
+        timestamp: new Date(Number(reportInfo.timestamp) * 1000).toISOString(), // Convert from seconds to milliseconds
+        status: status as any,
+        verifiedBy: reportInfo.verifiedBy !== '0x0000000000000000000000000000000000000000' ? reportInfo.verifiedBy : undefined,
+        verificationTimestamp: Number(reportInfo.verificationTimestamp) > 0 ? 
+          new Date(Number(reportInfo.verificationTimestamp) * 1000).toISOString() : undefined,
+        contentHash: reportInfo.contentHash,
+        rewardClaimed: reportInfo.rewardClaimed,
+        title: `Report #${Number(reportInfo.id)}`,
+        category: 'general', // Default category - could be extracted from decrypted content
+        content: 'Content is encrypted. Click "Decrypt with MetaMask" to view.',
+        anonymous: false // Default - could be determined from content
+      };
+      
+      console.log('📄 Formatted report:', blockchainReport);
+      setReport(blockchainReport);
+      
     } catch (error: any) {
-      console.error('Failed to fetch report:', error);
-      toast.error('Failed to load report details');
+      console.error('❌ Failed to fetch report:', error);
+      toast.error(`Failed to load report details: ${error.message}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleReportUpdated = (updatedReport: Report) => {
+    setReport(updatedReport);
   };
 
   const handleDecryptContent = async () => {
@@ -364,6 +442,14 @@ const ReportDetailPage = () => {
             </div>
           </div>
         </div>
+        
+        {/* Admin Actions */}
+        {isAdmin() && (
+          <AdminRewardActions 
+            report={report} 
+            onReportUpdated={setReport}
+          />
+        )}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ interface AuthContextType {
   logout: () => void;
   register: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  isAdmin: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -205,12 +206,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [wallet.isConnected, auth.isAuthenticated]);
 
+  // Check if current user is admin
+  const isAdmin = (): boolean => {
+    return auth.user?.role === 'ADMIN';
+  };
+
   const value: AuthContextType = {
     auth,
     login,
     logout,
     register,
     refreshUser,
+    isAdmin,
   };
 
   return (

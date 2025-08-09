@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Send, Shield, Eye, EyeOff, FileText, Tag, User, Clock, UserCheck } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
-import { reportApi, stakingApi } from '../services/api';
+import { stakingApi } from '../services/api';
 import { blockchainService } from '../services/blockchain';
 import StakingModal from '../components/StakingModal';
 import toast from 'react-hot-toast';
 
 const SubmitReportPage = () => {
   const navigate = useNavigate();
-  const { auth } = useAuth();
   const { wallet } = useWallet();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -41,17 +39,32 @@ const SubmitReportPage = () => {
 
       try {
         setIsCheckingVerification(true);
-        const response = await stakingApi.getStatus(wallet.address);
-        if (response.success && response.data) {
-          setVerificationStatus({
-            isRegistered: response.data.isRegistered,
-            isVerified: response.data.isVerified,
-            canSubmitReports: response.data.isVerified // Can submit reports if verified
-          });
+        
+        // Check verification status directly from blockchain
+        console.log('🔍 Checking verification status on blockchain for:', wallet.address);
+        
+        // Initialize blockchain service if needed
+        if (!blockchainService.isConnected()) {
+          await blockchainService.initializeFromExistingProvider();
         }
+        
+        const isVerified = await blockchainService.checkUserVerification(wallet.address);
+        console.log('🔍 User verification status:', isVerified);
+        
+        setVerificationStatus({
+          isRegistered: true, // If wallet is connected, we consider them registered
+          isVerified: isVerified,
+          canSubmitReports: isVerified // Can submit reports if verified on blockchain
+        });
+        
       } catch (error) {
         console.error('Failed to check verification status:', error);
-        toast.error('Failed to check verification status');
+        // Fallback: assume not verified if we can't check
+        setVerificationStatus({
+          isRegistered: false,
+          isVerified: false,
+          canSubmitReports: false
+        });
       } finally {
         setIsCheckingVerification(false);
       }
@@ -213,23 +226,6 @@ const SubmitReportPage = () => {
       return;
     }
 
-    if (!auth.isAuthenticated) {
-      toast.error('Please login first');
-      return;
-    }
-
-    // Check verification status before submission
-    if (!verificationStatus.canSubmitReports) {
-      if (!verificationStatus.isRegistered) {
-        toast.error('Please register your account first');
-        setShowStakingModal(true);
-        return;
-      } else if (!verificationStatus.isVerified) {
-        toast.error('Your account is not verified yet. Please wait for admin approval.');
-        return;
-      }
-    }
-
     if (!formData.title.trim() || !formData.content.trim()) {
       toast.error('Please fill in all required fields');
       return;
@@ -238,33 +234,63 @@ const SubmitReportPage = () => {
     setIsSubmitting(true);
 
     try {
-      // Initialize blockchain service from existing MetaMask provider
-      await blockchainService.initializeFromExistingProvider();
-
-      // Prepare encrypted content
-      console.log('📝 Submitting report via API...');
+      console.log('📝 Submitting report directly to blockchain...');
       
-      // Submit via API (which handles Sapphire encryption and gas payments)
-      const response = await reportApi.submitReport({
-        walletAddress: wallet.address,
-        title: formData.title.trim(),
-        category: formData.category,
-        content: formData.content.trim(),
-        evidence: formData.evidence.trim(),
-        anonymous: formData.anonymous,
-        severity: formData.severity
-      });
-
-      if (response.success && response.data) {
-        toast.success(`Report submitted successfully! Transaction: ${response.data.txHash?.slice(0, 10)}...`);
-        navigate('/reports');
-      } else {
-        throw new Error(response.message || 'Failed to submit report via API');
+      // Initialize blockchain service if not already done
+      if (!blockchainService.isConnected()) {
+        await blockchainService.connectWallet();
       }
 
+      // Check user verification status on blockchain
+      const isVerified = await blockchainService.checkUserVerification(wallet.address);
+      if (!isVerified) {
+        toast.error('You must be verified before submitting reports. Please complete the staking process first.');
+        setShowStakingModal(true);
+        return;
+      }
+
+      // Prepare report content as JSON string (this will be encrypted by the contract)
+      const reportContent = JSON.stringify({
+        title: formData.title.trim(),
+        content: formData.content.trim(),
+        evidence: formData.evidence.trim() || '',
+        category: formData.category,
+        severity: formData.severity,
+        anonymous: formData.anonymous,
+        timestamp: new Date().toISOString(),
+        submittedBy: wallet.address
+      });
+
+      console.log('📝 Submitting content to blockchain:', { 
+        contentLength: reportContent.length,
+        anonymous: formData.anonymous 
+      });
+
+      // Submit directly to blockchain via MetaMask
+      const txHash = await blockchainService.submitReport(reportContent);
+      
+      console.log('✅ Report submitted to blockchain:', txHash);
+      toast.success(`Report submitted successfully! Transaction: ${txHash.slice(0, 10)}...`);
+      
+      // Navigate to reports page
+      navigate('/reports');
+
     } catch (error: any) {
-      console.error('Failed to submit report:', error);
-      toast.error(error.message || 'Failed to submit report');
+      console.error('❌ Failed to submit report:', error);
+      
+      // Provide user-friendly error messages
+      if (error.message.includes('User denied')) {
+        toast.error('Transaction was cancelled by user');
+      } else if (error.message.includes('verification')) {
+        toast.error('Account verification required. Please complete the staking process.');
+        setShowStakingModal(true);
+      } else if (error.message.includes('gas')) {
+        toast.error('Insufficient gas fee. Please try again with more gas.');
+      } else if (error.message.includes('network')) {
+        toast.error('Network error. Please check your connection and try again.');
+      } else {
+        toast.error(error.message || 'Failed to submit report to blockchain');
+      }
     } finally {
       setIsSubmitting(false);
     }
