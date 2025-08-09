@@ -4,6 +4,7 @@ import { logger } from '../utils/logger.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { add } from 'winston';
 
 // Get current directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -228,7 +229,119 @@ class BlockchainService {
       confirmations: tx.confirmations
     };
   }
+
+  async checkUserRegisteration(address){
+    try{
+      await this.ensureInitialized();
+      const contract = this.getContract('UserVerification');
+
+      const isRegistered = await contract.isRegistered(address);
+      const isVerified = await contract.isUserVerified(address);
+
+      return {
+        isRegistered,
+        isVerified,
+        address
+      };
+    }catch (error){
+      logger.error(`failed to check user registration for ${address}: `, error);
+      throw error;
+    }
+  }
+
+  async registerUser(address, privateKey){
+    try{
+      await this.ensureInitialized();
+      const signer = this.createSigner(privateKey);
+      const contract = this.getContractWithSigner('UserVerification', signer);
+
+      const tx = await contract.registerUser(
+        `user_${Date.now()}`, //identifier
+        `1_year` //longevity
+      );
+      const receipt = await tx.wait();
+
+      return this.formatTransaction(receipt);
+    }catch (error){
+      logger.error(`failed to register user as verified ${address}: `, error);
+      throw error;
+    }
+  }
+
+  async verifyUser(userAddress, adminPrivateKey){
+    try{
+      await this.ensureInitialized();
+      const adminSigner = this.createSigner(adminPrivateKey);
+      const contract = this.getContractWithSigner('UserVerification', adminSigner);
+
+      const tx = await contract.verifyUser(userAddress);
+      const receipt = await tx.wait();
+
+      return this.formatTransaction(receipt);
+    }catch (error){
+      logger.error(`failed to verify user ${address}: `, error);
+      throw error;
+    }
+  }
+
+  async transferTokens(fromPrivateKey, toAddress, amount){
+    try{
+      await this.ensureInitialized();
+      const signer = this.createSigner(fromPrivateKey);
+      const contract = this.getContractWithSigner(`RewardToken`, signer);
+
+      const amountWei = ethers.parseEther(amount.toString());
+      const tx = await contract.transfer(toAddress, amountWei);
+      const receipt = await tx.wait();
+
+      return this.formatTransaction(receipt);
+    }catch(error){
+      logger.error(`failed to transfer token: `, error);
+      throw error;
+    }
+  }
+
+  //monitor transfer events for auto-verification
+  async monitorStakeTransfers(treasuryAddress, callback){
+    try{
+        await this.ensureInitialized();
+        const contract = this.getContract('RewardToken');
+        
+        // Listen for Transfer events TO the treasury
+        const filter = contract.filters.Transfer(null, treasuryAddress);
+
+        contract.on(filter, async (from, to, amount, event) => {
+        try {
+            const amountEther = ethers.formatEther(amount);
+            logger.info(`💰 Stake detected: ${from} → ${to} (${amountEther} GCR)`);
+            
+            // Call callback with stake information
+            if (callback) {
+              await callback({
+                from,
+                to,
+                amount: amountEther,
+                transactionHash: event.transactionHash,
+                blockNumber: event.blockNumber
+              });
+            }
+          } catch (error) {
+            logger.error('Error processing stake transfer:', error);
+          }
+        });
+
+        logger.info(`👂 Monitoring stake transfers to treasury: ${treasuryAddress}`);
+
+    }catch(error){
+      logger.error('Error processing stake transfer:', error);
+    }
+  }
+
+
+
 }
+
+
 
 // Create singleton instance
 const blockchainService = new BlockchainService();
