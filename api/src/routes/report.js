@@ -540,10 +540,12 @@ router.post('/:id/content', [
 
     // Get contract with signer for authorization
     const reportContract = blockchainService.getContractWithSigner('ReportContract', signer);
+    const userContract = blockchainService.getContract('UserVerification');
 
-    // First check if report exists
+    // First check if report exists and get report info
+    let reportInfo;
     try {
-      await reportContract.getReportInfo(reportId);
+      reportInfo = await reportContract.getReportInfo(reportId);
     } catch (error) {
       if (error.message.includes('Report does not exist')) {
         return res.status(404).json({
@@ -553,6 +555,56 @@ router.post('/:id/content', [
       }
       throw error;
     }
+
+    // SECURITY CHECK: Verify authorization before allowing decryption
+    const isReporter = reportInfo.reporter && reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase();
+    
+    // Check if user is an authorized verifier
+    let isVerifier = false;
+    try {
+      isVerifier = await reportContract.authorizedVerifiers(walletAddress);
+    } catch (error) {
+      logger.warn('Could not check verifier status:', error.message);
+    }
+    
+    // Check if user is admin
+    let isAdmin = false;
+    try {
+      const adminAddress = await userContract.admin();
+      isAdmin = adminAddress.toLowerCase() === walletAddress.toLowerCase();
+    } catch (error) {
+      logger.warn('Could not check admin status:', error.message);
+    }
+
+    // AUTHORIZATION: Only allow decryption if user is reporter, or admin
+    if (!isReporter && !isAdmin) {
+      logger.warn(`Unauthorized decryption attempt by ${walletAddress} for report ${reportId}. Reporter: ${reportInfo.reporter}`);
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to access this report',
+        error: 'UNAUTHORIZED_ACCESS',
+        details: {
+          reason: 'You can only access reports if you are:',
+          requirements: [
+            'The original reporter who submitted this report',
+            'An authorized verifier',
+            'An admin'
+          ],
+          yourStatus: {
+            isReporter,
+            isVerifier,
+            isAdmin
+          },
+          reportDetails: {
+            id: reportId,
+            reporter: reportInfo.reporter ? reportInfo.reporter.toString() : 'Unknown'
+          },
+          requestedBy: walletAddress
+        }
+      });
+    }
+
+    logger.info(`Authorized decryption for report ${reportId} by ${walletAddress} (Reporter: ${isReporter}, Verifier: ${isVerifier}, Admin: ${isAdmin})`);
 
     // Get decrypted content - this will only work if user is authorized (reporter or verifier)
     try {
@@ -977,6 +1029,152 @@ router.post('/submit-with-tx', [
       success: false,
       message,
       error: error.message
+    });
+  }
+});
+
+/**
+ * @route POST /api/reports/:id/test-authorization
+ * @desc Test authorization for report decryption (Postman testing)
+ * @access Public (for testing)
+ */
+// Replace the test-authorization endpoint with this corrected version:
+
+router.post('/:id/test-authorization', [
+  body('walletAddress').isEthereumAddress().withMessage('Valid wallet address required')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { id } = req.params;
+    const { walletAddress } = req.body;
+    const reportId = parseInt(id);
+
+    if (isNaN(reportId) || reportId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID'
+      });
+    }
+
+    // Ensure blockchain is initialized
+    await blockchainService.ensureInitialized();
+
+    const reportContract = blockchainService.getContract('ReportContract');
+    const userContract = blockchainService.getContract('UserVerification');
+
+    // Get report info
+    let reportInfo;
+    try {
+      reportInfo = await reportContract.getReportInfo(reportId);
+      logger.info(`Report info for ${reportId}:`, reportInfo);
+    } catch (error) {
+      if (error.message.includes('Report does not exist')) {
+        return res.status(404).json({
+          success: false,
+          message: 'Report not found'
+        });
+      }
+      throw error;
+    }
+
+    // Check authorization levels
+    // Fix: Use 'reporter' instead of 'submitter'
+    const isReporter = reportInfo.reporter && reportInfo.reporter.toLowerCase() === walletAddress.toLowerCase();
+    
+    let isVerifier = false;
+    try {
+      isVerifier = await reportContract.authorizedVerifiers(walletAddress);
+    } catch (error) {
+      logger.warn('Could not check verifier status:', error.message);
+      isVerifier = false;
+    }
+    
+    let isAdmin = false;
+    try {
+      const adminAddress = await userContract.admin();
+      isAdmin = adminAddress && adminAddress.toLowerCase() === walletAddress.toLowerCase();
+    } catch (error) {
+      logger.warn('Could not check admin status:', error.message);
+      isAdmin = false;
+    }
+
+    const isAuthorized = isReporter || isVerifier || isAdmin;
+
+    // Debug info
+    logger.info(`Authorization check for report ${reportId}:`, {
+      walletAddress,
+      reportReporter: reportInfo.reporter,
+      isReporter,
+      isVerifier,
+      isAdmin,
+      isAuthorized
+    });
+
+    // AUTHORIZATION: Return error if user is not authorized
+    if (!isAuthorized) {
+      logger.warn(`Unauthorized access attempt by ${walletAddress} for report ${reportId}. Reporter: ${reportInfo.reporter}`);
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to access this report',
+        error: 'UNAUTHORIZED_ACCESS',
+        details: {
+          reason: 'You can only access reports if you are:',
+          requirements: [
+            'The original reporter who submitted this report',
+            'An authorized verifier',
+            'An admin'
+          ],
+          yourStatus: {
+            isReporter,
+            isVerifier,
+            isAdmin
+          },
+          reportDetails: {
+            id: reportId,
+            reporter: reportInfo.reporter ? reportInfo.reporter.toString() : 'Unknown'
+          }
+        }
+      });
+    }
+
+    // User is authorized - return success
+    res.json({
+      success: true,
+      message: '✅ You are authorized to access this report',
+      data: {
+        reportId,
+        walletAddress,
+        authorization: {
+          isReporter,
+          isVerifier,
+          isAdmin,
+          isAuthorized: true,
+          canDecrypt: true
+        },
+        reportInfo: {
+          reporter: reportInfo.reporter ? reportInfo.reporter.toString() : 'Not available',
+          timestamp: reportInfo.timestamp ? reportInfo.timestamp.toString() : 'Not available',
+          status: reportInfo.status !== undefined ? reportInfo.status.toString() : 'Not available'
+        },
+        securityNote: "✅ Authorization granted - you can decrypt this report"
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error checking authorization:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check authorization',
+      error: error.message,
+      stack: error.stack
     });
   }
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useWallet } from '../../contexts/WalletContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useUserRoles } from '../../hooks/useUserRoles';
 import { Shield, Menu, X, User, Settings, LogOut } from 'lucide-react';
 import { useState } from 'react';
 
@@ -10,11 +11,40 @@ const Navbar: React.FC = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const { wallet, disconnectWallet } = useWallet();
   const { auth, logout } = useAuth();
+  const { roles } = useUserRoles();
 
   const handleLogout = () => {
     logout();
     disconnectWallet();
     setIsProfileOpen(false);
+  };
+
+  // Helper function to get role badge color and text
+  const getRoleBadge = () => {
+    if (!roles) return null;
+
+    let badgeColor = '';
+    let badgeText = '';
+
+    if (roles.isAdmin) {
+      badgeColor = 'bg-red-100 text-red-800 border-red-200';
+      badgeText = 'ADMIN';
+    } else if (roles.isVerifier) {
+      badgeColor = 'bg-blue-100 text-blue-800 border-blue-200';
+      badgeText = 'VERIFIER';
+    } else if (roles.isVerified) {
+      badgeColor = 'bg-green-100 text-green-800 border-green-200';
+      badgeText = 'VERIFIED';
+    } else {
+      badgeColor = 'bg-gray-100 text-gray-800 border-gray-200';
+      badgeText = 'USER';
+    }
+
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${badgeColor}`}>
+        {badgeText}
+      </span>
+    );
   };
 
   return (
@@ -47,12 +77,15 @@ const Navbar: React.FC = () => {
                 <div className="relative">
                   <button
                     onClick={() => setIsProfileOpen(!isProfileOpen)}
-                    className="flex items-center space-x-2 text-secondary-600 hover:text-secondary-900"
+                    className="flex items-center space-x-3 text-secondary-600 hover:text-secondary-900"
                   >
                     <User className="w-5 h-5" />
-                    <span className="font-mono text-sm">
-                      {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)}
-                    </span>
+                    <div className="flex flex-col items-end">
+                      <span className="font-mono text-sm">
+                        {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)}
+                      </span>
+                      {getRoleBadge()}
+                    </div>
                   </button>
 
                   {isProfileOpen && (
@@ -116,6 +149,19 @@ const Navbar: React.FC = () => {
           <div className="px-2 pt-2 pb-3 space-y-1">
             {auth.isAuthenticated ? (
               <>
+                {/* Mobile Wallet Info */}
+                <div className="flex items-center justify-between px-3 py-2 border-b border-secondary-200 mb-2">
+                  <div>
+                    <div className="font-mono text-sm text-secondary-900">
+                      {wallet.address?.slice(0, 6)}...{wallet.address?.slice(-4)}
+                    </div>
+                    <div className="mt-1">
+                      {getRoleBadge()}
+                    </div>
+                  </div>
+                  <User className="w-5 h-5 text-secondary-600" />
+                </div>
+
                 <Link
                   to="/dashboard"
                   className="block px-3 py-2 text-secondary-600 hover:text-secondary-900"

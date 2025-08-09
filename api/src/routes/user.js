@@ -318,4 +318,88 @@ router.get('/stats/total', async (req, res) => {
   }
 });
 
+/**
+ * @route GET /api/users/:address/roles
+ * @desc Get user roles and permissions
+ * @access Public
+ */
+router.get('/:address/roles', async (req, res) => {
+  try {
+    const { address } = req.params;
+
+    if (!address || !address.match(/^0x[a-fA-F0-9]{40}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid wallet address required'
+      });
+    }
+
+    await blockchainService.ensureInitialized();
+
+    const reportContract = blockchainService.getContract('ReportContract');
+    const userContract = blockchainService.getContract('UserVerification');
+
+    // Check if user is verified
+    let isVerified = false;
+    try {
+      const userInfo = await userContract.users(address);
+      isVerified = userInfo.isVerified || false;
+    } catch (error) {
+      logger.warn('Could not check user verification status:', error.message);
+      isVerified = false;
+    }
+
+    // Check if user is an authorized verifier
+    let isVerifier = false;
+    try {
+      isVerifier = await reportContract.authorizedVerifiers(address);
+    } catch (error) {
+      logger.warn('Could not check verifier status:', error.message);
+      isVerifier = false;
+    }
+
+    // Check if user is admin
+    let isAdmin = false;
+    try {
+      const adminAddress = await userContract.admin();
+      isAdmin = adminAddress && adminAddress.toLowerCase() === address.toLowerCase();
+    } catch (error) {
+      logger.warn('Could not check admin status:', error.message);
+      isAdmin = false;
+    }
+
+    // Determine role string
+    let role = 'USER';
+    if (isAdmin) {
+      role = 'ADMIN';
+    } else if (isVerifier) {
+      role = 'VERIFIER';
+    } else if (isVerified) {
+      role = 'VERIFIED_USER';
+    }
+
+    res.json({
+      success: true,
+      data: {
+        address,
+        isVerified,
+        isVerifier,
+        isAdmin,
+        isReporter: isVerified, // Verified users can be reporters
+        role
+      }
+    });
+
+    logger.info(`Role check for ${address}: Admin=${isAdmin}, Verifier=${isVerifier}, Verified=${isVerified}`);
+
+  } catch (error) {
+    logger.error('Error checking user roles:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check user roles',
+      error: error.message
+    });
+  }
+});
+
 export default router;

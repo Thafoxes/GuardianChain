@@ -109,6 +109,15 @@ export const userApi = {
     privateKey?: string;
   }): Promise<ApiResponse<{ txHash: string }>> =>
     api.post('/users/register', data),
+
+  getUserRoles: (address: string): Promise<ApiResponse<{
+    isReporter: boolean;
+    isVerifier: boolean;
+    isAdmin: boolean;
+    isVerified: boolean;
+    role: string;
+  }>> =>
+    api.get(`/users/${address}/roles`),
 };
 
 // Report API
