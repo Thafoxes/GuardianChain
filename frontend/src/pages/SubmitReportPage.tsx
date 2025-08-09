@@ -85,20 +85,92 @@ const SubmitReportPage = () => {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [wallet.isConnected, wallet.address]);
 
-  const handleVerificationComplete = () => {
+  const handleVerificationComplete = async () => {
+    console.log('🔄 handleVerificationComplete called for wallet:', wallet.address);
+    
     // Refresh verification status after registration
     if (wallet.address) {
-      stakingApi.getStatus(wallet.address)
-        .then(response => {
-          if (response.success && response.data) {
+      try {
+        // Show loading state
+        setIsCheckingVerification(true);
+        console.log('📊 Checking verification status...');
+        
+        const response = await stakingApi.getStatus(wallet.address);
+        console.log('📋 Status response:', response);
+        
+        if (response.success && response.data) {
+          const { isRegistered, isVerified } = response.data;
+          console.log(`🔍 User status - Registered: ${isRegistered}, Verified: ${isVerified}`);
+          
+          // If user is registered but not verified, trigger verification process
+          if (isRegistered && !isVerified) {
+            console.log('⚡ User needs verification - calling verify-and-reward endpoint');
+            toast('🔄 User is registered but not verified. Attempting verification...', {
+              icon: '⚡',
+              duration: 4000
+            });
+            
+            try {
+              // Call the verification API endpoint
+              const verifyResponse = await fetch(`http://localhost:3001/api/stake/verify-and-reward`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  walletAddress: wallet.address
+                })
+              });
+              
+              const verifyResult = await verifyResponse.json();
+              console.log('✅ Verify response:', verifyResult);
+              
+              if (verifyResult.success) {
+                toast.success('✅ Verification successful! You can now submit reports.');
+                setVerificationStatus({
+                  isRegistered: true,
+                  isVerified: true,
+                  canSubmitReports: true
+                });
+              } else {
+                console.error('❌ Verification failed:', verifyResult);
+                toast.error(`Verification failed: ${verifyResult.error || 'Unknown error'}`);
+              }
+            } catch (verifyError) {
+              console.error('💥 Verification error:', verifyError);
+              toast.error('Failed to verify user. Please try again.');
+            }
+          } else {
+            // Update status normally
             setVerificationStatus({
               isRegistered: response.data.isRegistered,
               isVerified: response.data.isVerified,
               canSubmitReports: response.data.isVerified
             });
+            
+            // Show feedback to user
+            if (response.data.isVerified) {
+              toast.success('✅ Verification complete! You can now submit reports.');
+            } else if (!response.data.isRegistered) {
+              toast.error('❌ User not registered. Please complete registration first.');
+            } else {
+              toast('🔄 Still processing... Please wait a few more seconds and try again.', {
+                icon: '⏳',
+                duration: 4000
+              });
+            }
           }
-        })
-        .catch(error => console.error('Failed to refresh verification status:', error));
+        } else {
+          console.error('❌ Failed status response:', response);
+          toast.error('Failed to check verification status. Please try again.');
+        }
+      } catch (error) {
+        console.error('💥 Failed to refresh verification status:', error);
+        toast.error('Network error. Please check your connection and try again.');
+      } finally {
+        setIsCheckingVerification(false);
+        console.log('✅ handleVerificationComplete finished');
+      }
     }
   };
 
@@ -180,13 +252,24 @@ const SubmitReportPage = () => {
         timestamp: new Date().toISOString()
       });
 
-      console.log('📝 Submitting report via MetaMask...');
+      console.log('📝 Submitting report via API...');
       
-      // Submit directly to blockchain via MetaMask (user signs the transaction)
-      const txHash = await blockchainService.submitReport(reportContent);
+      // Submit via API (which handles Sapphire encryption and gas payments)
+      const response = await reportApi.submitReport({
+        walletAddress: wallet.address,
+        title: formData.title,
+        category: formData.category,
+        content: reportContent,
+        anonymous: formData.anonymous,
+        severity: formData.severity
+      });
 
-      toast.success(`Report submitted successfully! Transaction: ${txHash.slice(0, 10)}...`);
-      navigate('/reports');
+      if (response.success && response.data) {
+        toast.success(`Report submitted successfully! Transaction: ${response.data.txHash?.slice(0, 10)}...`);
+        navigate('/reports');
+      } else {
+        throw new Error(response.message || 'Failed to submit report via API');
+      }
 
     } catch (error: any) {
       console.error('Failed to submit report:', error);
@@ -288,9 +371,21 @@ const SubmitReportPage = () => {
                   </div>
                   <button
                     onClick={handleVerificationComplete}
-                    className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                    disabled={isCheckingVerification}
+                    className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                      isCheckingVerification
+                        ? 'bg-gray-400 cursor-not-allowed text-white'
+                        : 'bg-gray-600 hover:bg-gray-700 text-white'
+                    }`}
                   >
-                    Check Status Again
+                    {isCheckingVerification ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Checking...</span>
+                      </div>
+                    ) : (
+                      'Check Status Again'
+                    )}
                   </button>
                 </div>
               )}

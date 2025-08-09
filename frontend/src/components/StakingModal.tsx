@@ -43,6 +43,13 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
     }
   }, [isOpen, wallet.address]);
 
+  // Handle step changes - especially 'check' step
+  useEffect(() => {
+    if (step === 'check' && wallet.address) {
+      checkUserStatus();
+    }
+  }, [step, wallet.address]);
+
   const checkUserStatus = async () => {
     if (!wallet.address) return;
 
@@ -470,10 +477,13 @@ const StakingModal: React.FC<StakingModalProps> = ({ isOpen, onClose, onSuccess 
               <p className="text-gray-600 mb-6">{error}</p>
               <div className="space-y-3">
                 <button
-                  onClick={() => setStep('check')}
+                  onClick={() => {
+                    setStep('check');
+                    checkUserStatus();
+                  }}
                   className="w-full bg-primary-600 text-white py-3 px-4 rounded-md font-medium hover:bg-primary-700"
                 >
-                  Try Again
+                  Check Status Again
                 </button>
                 <button
                   onClick={onClose}
