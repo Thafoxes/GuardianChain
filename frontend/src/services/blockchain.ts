@@ -4,6 +4,13 @@ import { wrap } from '@oasisprotocol/sapphire-paratime';
 // Contract ABI for ReportContract (only the functions we need)
 const REPORT_CONTRACT_ABI = [
   {
+    "inputs": [{"internalType": "string", "name": "encryptedContent", "type": "string"}],
+    "name": "submitReport",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [{"internalType": "uint256", "name": "reportId", "type": "uint256"}],
     "name": "getReportContent",
     "outputs": [{"internalType": "string", "name": "", "type": "string"}],
@@ -35,6 +42,16 @@ const REPORT_CONTRACT_ABI = [
     ],
     "name": "ContentRetrieved",
     "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "uint256", "name": "reportId", "type": "uint256"},
+      {"indexed": true, "internalType": "address", "name": "reporter", "type": "address"},
+      {"indexed": false, "internalType": "bytes32", "name": "contentHash", "type": "bytes32"}
+    ],
+    "name": "ReportSubmitted",
+    "type": "event"
   }
 ];
 
@@ -47,12 +64,12 @@ const SAPPHIRE_LOCALNET = {
     symbol: 'TEST',
     decimals: 18,
   },
-  rpcUrls: ['http://localhost:8545'],
-  blockExplorerUrls: ['http://localhost:8545'],
+  rpcUrls: ['http://localhost:8544'],
+  blockExplorerUrls: ['http://localhost:8544'],
 };
 
 // Contract address from deployment
-const REPORT_CONTRACT_ADDRESS = '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0';
+const REPORT_CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS_REPORT_CONTRACT;
 
 export class BlockchainService {
   private provider: ethers.BrowserProvider | null = null;
@@ -95,6 +112,26 @@ export class BlockchainService {
     }
   }
 
+  async initializeFromExistingProvider(): Promise<void> {
+    if (!window.ethereum) {
+      throw new Error('MetaMask is not installed');
+    }
+
+    try {
+      // Create provider and wrap for Sapphire
+      this.provider = new ethers.BrowserProvider(window.ethereum);
+      this.provider = wrap(this.provider);
+      
+      // Get signer
+      this.signer = await this.provider.getSigner();
+      
+      console.log('🔗 Blockchain service initialized with existing provider');
+    } catch (error: any) {
+      console.error('🔗 Error initializing blockchain service:', error);
+      throw new Error(`Failed to initialize blockchain service: ${error.message}`);
+    }
+  }
+
   async switchToSapphireLocalnet(): Promise<void> {
     if (!window.ethereum) {
       throw new Error('MetaMask is not installed');
@@ -122,6 +159,141 @@ export class BlockchainService {
       }
     }
   }
+
+  async checkUserVerification(userAddress: string): Promise<boolean> {
+  if (!this.provider) {
+    throw new Error('Provider not initialized');
+  }
+
+  try {
+    // You'll need the UserVerification contract ABI and address
+    const userVerificationAddress = import.meta.env.VITE_CONTRACT_ADDRESS_USER_VERIFICATION; // Update with your deployed address
+    
+    const userVerificationABI = [
+      {
+        "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
+        "name": "isUserVerified",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function"
+      }
+    ];
+
+    const userContract = new ethers.Contract(
+      userVerificationAddress,
+      userVerificationABI,
+      this.provider
+    );
+
+    const isVerified = await userContract.isUserVerified(userAddress);
+    console.log('🔍 User verification status:', { userAddress, isVerified });
+    
+    return isVerified;
+  } catch (error: any) {
+    console.error('🔍 Error checking verification:', error);
+    return false;
+  }
+  }
+
+  async submitReport(encryptedContent: string): Promise<string> {
+  if (!this.signer || !this.provider) { // Fix: was missing 'provider'
+    throw new Error('Wallet not connected. Please connect your wallet first.');
+  }
+
+  try {
+    console.log('📝 Submitting report to blockchain...');
+
+    // Get user address
+    const userAddress = await this.signer.getAddress();
+    console.log('📝 Submitting from address:', userAddress);
+
+     // CHECK 1: Verify user is verified before submitting
+    console.log('🔍 Checking user verification status...');
+    const isVerified = await this.checkUserVerification(userAddress);
+    
+    if (!isVerified) {
+      throw new Error('You must be verified before submitting reports. Please complete the verification process first.');
+    }
+    
+    console.log('✅ User is verified, proceeding with submission');
+
+    // Get contract with signer
+    const contract = new ethers.Contract(
+      REPORT_CONTRACT_ADDRESS,
+      REPORT_CONTRACT_ABI,
+      this.signer
+    );
+
+     // CHECK 2: Verify contract is properly deployed
+    try {
+      const totalReports = await contract.getTotalReports();
+      console.log('📊 Current total reports:', totalReports.toString());
+    } catch (contractError: any) {
+      console.error('📝 Contract connection error:', contractError);
+      throw new Error('Contract not properly deployed or accessible. Please check your network connection.');
+    }
+
+    // Check network to determine transaction type
+    const network = await this.provider.getNetwork();
+    const chainId = network.chainId;
+    
+    console.log('Network info:', { 
+      chainId: chainId.toString(), 
+      name: network.name,
+      isSapphireLocalnet: chainId === 23293n 
+    });
+
+    // For Sapphire localnet, use legacy transaction format
+    const txOptions: any = {
+      gasLimit: 200000
+    };
+    
+    if (chainId === 23293n) { // Sapphire Localnet
+      // Use legacy transaction format for Sapphire localnet
+      txOptions.gasPrice = ethers.parseUnits('1', 'gwei');
+      console.log('Using legacy transaction for Sapphire localnet');
+    } else {
+      // EIP-1559 for other networks
+      txOptions.maxFeePerGas = ethers.parseUnits('20', 'gwei');
+      txOptions.maxPriorityFeePerGas = ethers.parseUnits('2', 'gwei');
+      console.log('Using EIP-1559 transaction');
+    }
+
+    console.log('Transaction options:', txOptions);
+
+    // Submit report with appropriate transaction options
+    const tx = await contract.submitReport(encryptedContent, txOptions);
+
+    console.log('📝 Report submitted, transaction hash:', tx.hash);
+    
+    // Wait for confirmation
+    const receipt = await tx.wait();
+    
+    if (receipt.status === 1) {
+      console.log('✅ Report submission confirmed');
+      return tx.hash;
+    } else {
+      throw new Error('Transaction failed');
+    }
+
+  } catch (error: any) {
+    console.error('📝 Error submitting report:', error);
+    
+    if (error.message.includes('User must be verified')) {
+      throw new Error('You must be verified before submitting reports. Please complete the verification process first.');
+    } else if (error.message.includes('user rejected')) {
+      throw new Error('Transaction was rejected by user.');
+    } else if (error.message.includes('insufficient funds')) {
+      throw new Error('Insufficient funds for transaction fees.');
+    } else if (error.message.includes('execution reverted')) {
+      throw new Error('Transaction failed. Please ensure you are verified and have sufficient funds.');
+    } else if (error.message.includes('EIP-1559')) {
+      throw new Error('Network transaction format issue. Please try again.');
+    } else {
+      throw new Error(`Failed to submit report: ${error.message}`);
+    }
+  }
+}
 
   async getReportContent(reportId: number): Promise<{
     content: string;
