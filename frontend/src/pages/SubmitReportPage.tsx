@@ -573,7 +573,7 @@ const SubmitReportPage = () => {
               {/* Evidence */}
               <div>
                 <label htmlFor="evidence" className="block text-sm font-medium text-gray-700 mb-2">
-                  Evidence/Supporting Information
+                  Evidence/Supporting Information *
                 </label>
                 <textarea
                   id="evidence"
